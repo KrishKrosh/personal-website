@@ -4,13 +4,12 @@ import { useRef, useMemo, useState, useEffect } from "react"
 import { useFrame } from "@react-three/fiber"
 import { MathUtils, Vector3, Group } from "three"
 import Card from "./card"
-import { InfoPanel } from "./card-info"
 
 // Define props interface for CardDeck
 interface CardDeckProps {
   hovered: boolean;
   expanded: boolean;
-  onSelectionChange?: (isSelected: boolean) => void;
+  onSelectionChange?: (isSelected: boolean, cardId?: number | null) => void;
 }
 
 // Interface for card data
@@ -28,10 +27,35 @@ interface CardData {
 export default function CardDeck({ hovered, expanded, onSelectionChange }: CardDeckProps) {
   const groupRef = useRef<Group>(null)
   // Reduce the number of cards to improve performance
-  const numCards = 52 // Half a standard deck for better performance
+  const numCards = 26 // Half a standard deck for better performance
   
   // State for selected card
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null)
+  
+  // State to track info panel position
+  const [infoPanelPosition, setInfoPanelPosition] = useState<[number, number, number]>([2.5, 0, 0])
+  
+  // Update info panel position based on window size
+  useEffect(() => {
+    const updatePanelPosition = () => {
+      const width = window.innerWidth;
+      // Adjust panel position based on screen size
+      if (width < 640) { // Mobile
+        setInfoPanelPosition([0, -2.5, 0]); // Below the card
+      } else {
+        setInfoPanelPosition([2.5, 0, 0]); // To the right of the card
+      }
+    };
+    
+    // Set initial position
+    updatePanelPosition();
+    
+    // Add resize listener
+    window.addEventListener('resize', updatePanelPosition);
+    
+    // Cleanup
+    return () => window.removeEventListener('resize', updatePanelPosition);
+  }, []);
   
   // Create card data with initial positions
   const cards = useMemo<CardData[]>(() => {
@@ -45,8 +69,8 @@ export default function CardDeck({ hovered, expanded, onSelectionChange }: CardD
       ),
       // Random rotation for when expanded
       rotation: [Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2],
-      // Random radius for the globe formation
-      radius: 3 + Math.random() * 2,
+      // Larger and more consistent radius for the globe formation to prevent intersections
+      radius: 4 + Math.random() * 1.5,
       // Random speed for rotation - reduced for better performance
       speed: 0.1 + Math.random() * 0.2,
       // Random phase for varied movement
@@ -57,8 +81,8 @@ export default function CardDeck({ hovered, expanded, onSelectionChange }: CardD
         MathUtils.randFloatSpread(2),
         MathUtils.randFloatSpread(2),
       ).normalize(),
-      // Random scale for varied card sizes in globe
-      scale: 0.7 + Math.random() * 0.6,
+      // More consistent scale to prevent size-based intersections
+      scale: 0.8 + Math.random() * 0.3,
     }))
   }, [numCards])
 
@@ -67,26 +91,59 @@ export default function CardDeck({ hovered, expanded, onSelectionChange }: CardD
     const newSelectedId = cardId === selectedCardId ? null : cardId;
     setSelectedCardId(newSelectedId);
     
+    // Reset the group rotation when a card is selected
+    if (newSelectedId !== null && groupRef.current) {
+      groupRef.current.rotation.set(0, 0, 0);
+    }
+    
     // Notify parent component about selection state change
     if (onSelectionChange) {
-      onSelectionChange(newSelectedId !== null);
+      onSelectionChange(newSelectedId !== null, newSelectedId);
     }
   }
 
-  // Animate the group - reduced rotation speed
-  useFrame((state) => {
-    if (groupRef.current && !selectedCardId) {
-      // Slower rotation of the entire deck for better performance
-      groupRef.current.rotation.y = state.clock.getElapsedTime() * 0.05
+  // Animation progress for smooth transitions
+  const [selectionAnimProgress, setSelectionAnimProgress] = useState(0)
+  
+  // Animate the selection transition
+  useFrame((state, delta) => {
+    // Use delta time for smooth animations regardless of frame rate
+    const frameFactor = Math.min(delta * 60, 2)
+    
+    if (selectedCardId !== null) {
+      setSelectionAnimProgress(prev => Math.min(prev + 0.1 * frameFactor, 1))
+      
+      // Ensure the group rotation stays at zero when a card is selected
+      if (groupRef.current) {
+        groupRef.current.rotation.set(0, 0, 0);
+      }
+    } else {
+      setSelectionAnimProgress(prev => Math.max(prev - 0.1 * frameFactor, 0))
+      
+      // Only rotate the group when no card is selected
+      if (groupRef.current) {
+        groupRef.current.rotation.y = state.clock.getElapsedTime() * 0.05;
+      }
     }
   })
 
+  // Determine which cards to render based on selection state
+  const cardsToRender = selectedCardId === null 
+    ? cards // Render all cards when none is selected
+    : cards.filter(card => card.id === selectedCardId); // Only render the selected card
+
   return (
     <group ref={groupRef}>
-      {cards.map((card) => (
+      {cardsToRender.map((card, index) => (
         <Card 
           key={card.id} 
-          card={card} 
+          card={{
+            ...card,
+            index: index,
+            totalCards: cardsToRender.length,
+            // Apply a larger scale when the card is selected
+            scale: selectedCardId === card.id ? card.scale * 1.25 : card.scale
+          }} 
           hovered={hovered} 
           expanded={expanded} 
           isSelected={card.id === selectedCardId}
@@ -94,19 +151,6 @@ export default function CardDeck({ hovered, expanded, onSelectionChange }: CardD
           onSelect={handleCardSelect}
         />
       ))}
-      
-      {/* Information panel displayed when a card is selected */}
-      {selectedCardId !== null && (
-        <group position={[3, 0, 0]}>
-          <mesh>
-            <planeGeometry args={[4, 5]} />
-            <meshStandardMaterial color="#f5f5dc" opacity={0.9} transparent />
-          </mesh>
-          <group position={[0, 0, 0.01]}>
-            <InfoPanel cardId={selectedCardId} />
-          </group>
-        </group>
-      )}
     </group>
   )
 }

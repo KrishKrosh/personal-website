@@ -3,7 +3,7 @@
 import { useRef, useState, useMemo, useEffect } from "react"
 import { useFrame, useThree } from "@react-three/fiber"
 import { MeshStandardMaterial, DoubleSide, Vector3, Group, Shape, ExtrudeGeometry, 
-         MeshBasicMaterial, Euler } from "three"
+         MeshBasicMaterial, Euler, Quaternion, Matrix4 } from "three"
 import { Text } from "@react-three/drei"
 
 // Card suits and values
@@ -21,6 +21,8 @@ interface CardProps {
     phase: number;
     axis: Vector3;
     scale: number;
+    index?: number;  // Add index for position calculation
+    totalCards?: number;  // Add total number of cards for positioning
   };
   hovered: boolean;
   expanded: boolean;
@@ -61,13 +63,20 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
   const [value] = useState(values[card.id % 13])
   const [isRed] = useState(suit === "♥" || suit === "♦")
   const [isCardHovered, setIsCardHovered] = useState(false)
-  const { pointer, viewport } = useThree()
+  const { pointer, viewport, camera } = useThree()
   
   // State for animation
   const [outlineIntensity, setOutlineIntensity] = useState(0)
   const [pulsePhase, setPulsePhase] = useState(Math.random() * Math.PI * 2)
   const [selectionProgress, setSelectionProgress] = useState(0)
   const [opacity, setOpacity] = useState(1)
+  
+  // Save the position and rotation at selection time
+  const selectionState = useRef({
+    position: new Vector3(),
+    rotation: new Euler(),
+    selected: false
+  })
   
   // Animation state references to track previous values
   const prevStateRef = useRef({
@@ -111,19 +120,163 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     return new ExtrudeGeometry(outlineShape, outlineExtrudeSettings)
   }, [])
 
+  // Add these state variables to track tilt targets and current values
+  const [currentTilt, setCurrentTilt] = useState({ x: 0, y: 0 });
+  const [targetTilt, setTargetTilt] = useState({ x: 0, y: 0 });
+
+  // State for card positioning and screen size
+  const [isSmallScreen, setIsSmallScreen] = useState(false)
+  
+  // Update screen size state
+  useEffect(() => {
+    const updateScreenSize = () => {
+      setIsSmallScreen(window.innerWidth < 640);
+    };
+    
+    // Set initial size
+    updateScreenSize();
+    
+    // Add resize listener
+    window.addEventListener('resize', updateScreenSize);
+    
+    // Cleanup
+    return () => window.removeEventListener('resize', updateScreenSize);
+  }, []);
+
+  // Keep track of when card becomes selected
+  useEffect(() => {
+    if (isSelected && !selectionState.current.selected && meshRef.current) {
+      // Store position and rotation at selection time
+      selectionState.current.position.copy(meshRef.current.position)
+      selectionState.current.rotation.copy(meshRef.current.rotation)
+      selectionState.current.selected = true
+      
+      // Store the exact world position and rotation at selection time
+      // This ensures we animate from the exact position where the card was clicked
+      if (meshRef.current.parent) {
+        // Get world position by applying parent transformations
+        const worldPosition = new Vector3();
+        meshRef.current.getWorldPosition(worldPosition);
+        selectionState.current.position.copy(worldPosition);
+        
+        // Get world rotation
+        const worldQuaternion = new Quaternion();
+        meshRef.current.getWorldQuaternion(worldQuaternion);
+        const worldEuler = new Euler().setFromQuaternion(worldQuaternion);
+        selectionState.current.rotation.copy(worldEuler);
+      }
+    } else if (!isSelected) {
+      selectionState.current.selected = false
+    }
+  }, [isSelected])
+
   // Calculate tilt based on pointer position (for selected card)
   const calculateTilt = () => {
+    // Only calculate target tilt if the card is selected
     if (!isSelected) return { x: 0, y: 0 };
     
     // Convert pointer coordinates to normalized values (-1 to 1)
     const x = (pointer.x * viewport.width) / 2;
     const y = (pointer.y * viewport.height) / 2;
     
+    // Check if the cursor is over the card using raycasting
+    const isPointerOverCard = document.body.style.cursor === 'pointer';
+    
+    if (!isPointerOverCard) {
+      // When cursor is not over the card, set target tilt to zero (flat)
+      setTargetTilt({ x: 0, y: 0 });
+      return { x: 0, y: 0 };
+    }
+    
     // Calculate tilt angles (limit to small values for subtle effect)
-    return {
+    const newTilt = {
       x: y * 0.1, // Tilt around X axis based on Y position
       y: x * 0.1, // Tilt around Y axis based on X position
     };
+    
+    // Update the target tilt that we'll smoothly move toward
+    setTargetTilt(newTilt);
+    return newTilt;
+  }
+
+  // Calculate position using Fibonacci sphere algorithm
+  const calculateFibonacciSpherePosition = (index: number, total: number, radius: number, time: number) => {
+    // Golden ratio approximation
+    const phi = Math.PI * (3 - Math.sqrt(5));
+    
+    // Get y position (latitude)
+    const y = 1 - (index / (total - 1)) * 2;
+    
+    // Calculate radius at this latitude
+    const latRadius = Math.sqrt(1 - y * y);
+    
+    // Calculate longitude with time-based rotation
+    // Add a small time factor for global rotation, but keep the Fibonacci distribution
+    const longitude = phi * index + time * card.speed * 0.2;
+    
+    // Add slight wobble to each card's position to create more organic movement
+    const wobble = Math.sin(time * 0.5 + card.phase) * 0.1;
+    
+    // Calculate position with adjusted radius to account for card dimensions
+    // Width and height of card need to be considered to prevent intersections
+    const cardSpacingFactor = 1.3; // Factor to account for card dimensions
+    const adjustedRadius = radius * cardSpacingFactor;
+    
+    const x = Math.cos(longitude) * latRadius * adjustedRadius;
+    const z = Math.sin(longitude) * latRadius * adjustedRadius;
+    const adjustedY = y * adjustedRadius * 0.6 + wobble;
+    
+    return { x, y: adjustedY, z };
+  }
+
+  // Calculate position when expanded but not selected
+  const calculateExpandedPosition = (index: number, numCards: number, time: number) => {
+    if (isSelected) {
+      // If selected, position the card at center-left area
+      if (isSmallScreen) {
+        // On small screens, position the card centered and higher up
+        return {
+          x: 0,
+          y: 2,
+          z: 0.5,
+          rotX: 0,
+          rotY: Math.PI * 0.1, // Slight turn for 3D effect
+          rotZ: 0
+        };
+      } else {
+        // On larger screens, position the card on the left
+        return {
+          x: -2.5, // Moved more to the left to make room for text
+          y: 0,    // Centered vertically
+          z: 0.5,  // Slightly forward
+          rotX: 0,
+          rotY: Math.PI * 0.1, // Slight turn for 3D effect
+          rotZ: 0
+        };
+      }
+    } else if (allCardsSelected) {
+      // Other cards should be hidden when one is selected
+      return {
+        x: 0,
+        y: -1000, // Move way off screen
+        z: 0,
+        rotX: 0,
+        rotY: 0,
+        rotZ: 0
+      };
+    } else {
+      // Default position for expanded cards in the globe pattern
+      // This code uses the Fibonacci sphere algorithm from above
+      const position = calculateFibonacciSpherePosition(index, numCards, card.radius, time);
+      return {
+        x: position.x,
+        y: position.y,
+        z: position.z,
+        rotX: card.axis.x * time * 0.1,
+        rotY: card.axis.y * time * 0.1,
+        rotZ: card.axis.z * time * 0.1
+      };
+    }
   }
 
   useFrame((state, delta) => {
@@ -139,7 +292,7 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     const currentPosition = meshRef.current.position.clone()
     let targetPosition = new Vector3()
     let targetScale = scale
-    let targetOpacity = 1
+    let targetRotation = new Euler()
 
     // Update selection progress
     if (isSelected) {
@@ -148,29 +301,71 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       setSelectionProgress(prev => Math.max(prev - 0.05 * frameFactor, 0))
     }
 
-    // Handle opacity for non-selected cards
-    if (allCardsSelected && !isSelected) {
-      targetOpacity = 0.2
-    } else {
-      targetOpacity = 1
-    }
-    setOpacity(currentOpacity => currentOpacity + (targetOpacity - currentOpacity) * 0.1 * frameFactor)
+    // Calculate tilt and update targets
+    calculateTilt();
+    
+    // Smoothly interpolate current tilt toward target tilt
+    const tiltLerpFactor = 0.1 * frameFactor; // Adjust this value to control tilt speed
+    setCurrentTilt(prev => ({
+      x: prev.x + (targetTilt.x - prev.x) * tiltLerpFactor,
+      y: prev.y + (targetTilt.y - prev.y) * tiltLerpFactor
+    }));
 
     if (isSelected) {
-      // Position the selected card on the left side
-      targetPosition.set(-3, 0, 0)
+      // Position the selected card differently based on screen size
+      // Use the calculateExpandedPosition function to ensure consistency
+      const expandedPos = calculateExpandedPosition(0, 0, time);
+      targetPosition.set(expandedPos.x, expandedPos.y, expandedPos.z);
       
-      // Apply subtle tilt based on cursor position
-      const tilt = calculateTilt()
-      meshRef.current.rotation.x = tilt.x
-      meshRef.current.rotation.y = tilt.y
-      meshRef.current.rotation.z = 0
+      // For direct camera facing, ensure zero rotation as the base
+      targetRotation.set(0, 0, 0)
       
-      // Slightly larger scale for the selected card
-      targetScale = 1.5
+      // Reset any accumulated rotation first
+      if (selectionProgress >= 0.95 && meshRef.current) {
+        // Reset to zero rotation first to eliminate any accumulated z-rotation
+        meshRef.current.rotation.set(0, 0, 0)
+        
+        // Then apply smoothly interpolated tilt values for interactive effect
+        meshRef.current.rotation.x = currentTilt.x
+        meshRef.current.rotation.y = currentTilt.y + Math.PI * 0.1 // Add slight rotation for 3D effect
+        meshRef.current.rotation.z = 0
+      } else if (selectionProgress < 0.95) {
+        // During transition, interpolate towards the target rotation
+        const progress = selectionProgress
+        
+        // Create quaternions for smooth rotation interpolation
+        const startQuaternion = new Quaternion().setFromEuler(selectionState.current.rotation)
+        const endQuaternion = new Quaternion().setFromEuler(new Euler(0, Math.PI * 0.1, 0))
+        
+        // Interpolate between the start and end rotations
+        const interpolatedQuaternion = new Quaternion()
+        interpolatedQuaternion.slerpQuaternions(startQuaternion, endQuaternion, progress)
+        
+        // Apply the interpolated rotation
+        meshRef.current.quaternion.copy(interpolatedQuaternion)
+        
+        // During selection transition, also interpolate position from the exact selection position
+        if (selectionProgress < 0.8) {
+          // Create a temporary vector for interpolation
+          const tempPosition = new Vector3();
+          
+          // Interpolate between the stored selection position and the target position
+          tempPosition.lerpVectors(
+            selectionState.current.position,
+            targetPosition,
+            selectionProgress / 0.8 // Normalize progress to complete by 80% of the transition
+          );
+          
+          // Apply the interpolated position directly
+          meshRef.current.position.copy(tempPosition);
+        }
+      }
       
-      // Set outline intensity for the selected card
-      setOutlineIntensity(0.8 + Math.sin(time * 2) * 0.2)
+      // Larger scale for the selected card - increased for better visibility
+      targetScale = 1.75
+      
+      // No outline for selected cards
+      setOutlineIntensity(0)
     } else if (!hovered) {
       // Initial stacked position with backs facing the user
       targetPosition.copy(initialPosition)
@@ -194,21 +389,20 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       // Smooth transition to zero outline
       setOutlineIntensity(outlineIntensity => outlineIntensity * 0.9)
     } else {
-      // Globe formation with smooth orbital movement
-      const t = time * speed + phase
-
-      // Calculate position on the sphere
-      const x = Math.sin(t) * Math.cos(t * 2) * radius
-      const y = Math.cos(t) * radius * 0.6
-      const z = Math.sin(t * 2) * radius
+      // Use Fibonacci sphere algorithm to calculate position
+      const index = card.index || card.id;
+      const totalCards = card.totalCards || 15; // Default to 15 if not provided
+      
+      // Calculate position using even distribution algorithm
+      const position = calculateFibonacciSpherePosition(index, totalCards, radius, time);
       
       if (isCardHovered) {
         // Move hovered card slightly outward for emphasis
-        const hoverDirection = new Vector3(x, y, z).normalize()
+        const hoverDirection = new Vector3(position.x, position.y, position.z).normalize()
         targetPosition = new Vector3(
-          x + hoverDirection.x * 0.5,
-          y + hoverDirection.y * 0.5,
-          z + hoverDirection.z * 0.5
+          position.x + hoverDirection.x * 0.5,
+          position.y + hoverDirection.y * 0.5,
+          position.z + hoverDirection.z * 0.5
         )
         
         // Smooth scale animation on hover
@@ -220,7 +414,7 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
         setOutlineIntensity(intensity => intensity + (targetOutline - intensity) * 0.05)
       } else {
         // Standard position for non-hovered cards
-        targetPosition.set(x, y, z)
+        targetPosition.set(position.x, position.y, position.z)
         targetScale = scale
         
         // Fade out outline when not hovered
@@ -229,13 +423,15 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
 
       // Direct rotation application with frame-rate independence
       // This preserves the unique rotation of each card based on its axis
-      meshRef.current.rotation.x += axis.x * 0.01 * frameFactor
-      meshRef.current.rotation.y += axis.y * 0.01 * frameFactor
-      meshRef.current.rotation.z += axis.z * 0.01 * frameFactor
+      if (!isCardHovered) {
+        meshRef.current.rotation.x += axis.x * 0.01 * frameFactor
+        meshRef.current.rotation.y += axis.y * 0.01 * frameFactor
+        meshRef.current.rotation.z += axis.z * 0.01 * frameFactor
+      }
     }
 
     // Apply smooth position transitions
-    const positionLerpFactor = 0.06 * frameFactor
+    const positionLerpFactor = isSelected ? 0.08 * frameFactor : 0.06 * frameFactor
     meshRef.current.position.lerp(targetPosition, positionLerpFactor)
     
     // Apply smooth scale transition
@@ -260,10 +456,14 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
   const valueFontSize = value === "10" ? 0.18 : 0.2
   const cornerPosition = value === "10" ? 0.52 : 0.55
   
-  // Card interaction handlers - only active in expanded mode
+  // Card interaction handlers
   const handlePointerOver = () => {
-    if (expanded) {
+    // Only enable hover effects if the card is in expanded state but not selected
+    if (expanded && !isSelected) {
       setIsCardHovered(true)
+      document.body.style.cursor = 'pointer'
+    } else if (isSelected) {
+      // Still change cursor for selected card, but don't activate hover effects
       document.body.style.cursor = 'pointer'
     }
   }
@@ -274,8 +474,11 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
   }
   
   const handleClick = () => {
-    if (expanded && isCardHovered && onSelect) {
-      onSelect(card.id);
+    // Allow clicks in expanded mode and toggle selection
+    if ((expanded && isCardHovered) || isSelected) {
+      if (onSelect) {
+        onSelect(card.id)
+      }
     }
   }
 
@@ -286,8 +489,8 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       onPointerOut={handlePointerOut}
       onClick={handleClick}
     >
-      {/* Sleek outline effect for when card is hovered - render first for proper z-ordering */}
-      {(expanded || isSelected) && outlineIntensity > 0 && (
+      {/* Outline effect - only show for expanded cards that are hovered, never for selected cards */}
+      {expanded && !isSelected && isCardHovered && outlineIntensity > 0 && (
         <mesh geometry={outlineGeometry} renderOrder={-1}>
           <meshBasicMaterial 
             color="#dbb960" 
@@ -307,13 +510,11 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
           roughness={0.2} 
           metalness={0.1}
           side={DoubleSide}
-          transparent={allCardsSelected}
-          opacity={opacity}
         />
       </mesh>
 
       {/* Card face text/symbols rendered directly on the card */}
-      <group position={[0, 0, thickness/2 + 0.001]} renderOrder={2}>
+      <group position={[0, 0, thickness + 0.001]} renderOrder={2}>
         {/* Center symbol - larger for non-numeric cards */}
         <Text
           position={[0, 0, 0]}
@@ -380,9 +581,7 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
             color="#ffd700" 
             metalness={0.8} 
             roughness={0.1} 
-            side={DoubleSide} 
-            transparent={allCardsSelected}
-            opacity={opacity}
+            side={DoubleSide}
           />
         </mesh>
 
@@ -400,4 +599,3 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     </group>
   )
 }
-
