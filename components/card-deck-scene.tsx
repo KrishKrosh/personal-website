@@ -505,63 +505,83 @@ export default function CardDeckScene() {
         cardName, 
         (progress) => setTitleProgress(progress), 
         () => {
-          // After title completes, animate first paragraph
-          const text1 = `Ah yes. The ${cardName}. Beautiful isn't it?`;
-          const cancelP1 = animateText(
-            text1, 
-            (progress) => setParagraph1Progress(progress), 
-            () => {
-              // After first paragraph, animate second
-              const text2 = `It reminds me of you. It came all the way from ${userLocation}.`;
-              const cancelP2 = animateText(
-                text2, 
-                (progress) => setParagraph2Progress(progress), 
-                () => {
-                  // Continue with subsequent paragraphs
-                  const text3 = `Me? Well I spend most of my time tinkering with technology.`;
-                  const cancelP3 = animateText(
-                    text3, 
-                    (progress) => setParagraph3Progress(progress), 
+          // Add longer pause after title (1200ms instead of 800ms)
+          setTimeout(() => {
+            // After title completes, animate first paragraph
+            const text1 = `Ah yes. The ${cardName}. Beautiful isn't it?`;
+            const cancelP1 = animateText(
+              text1, 
+              (progress) => setParagraph1Progress(progress), 
+              () => {
+                // Add longer pause after first paragraph (1200ms)
+                setTimeout(() => {
+                  // After first paragraph, animate second
+                  const text2 = `It reminds me of you. It came all the way from ${userLocation}.`;
+                  const cancelP2 = animateText(
+                    text2, 
+                    (progress) => setParagraph2Progress(progress), 
                     () => {
-                      const text4 = `Why? Because it reminds me of magic, of course.`;
-                      const cancelP4 = animateText(
-                        text4, 
-                        (progress) => setParagraph4Progress(progress), 
-                        () => {
-                          const text5 = `More? Well I guess I could share a couple of my notes with you.`;
-                          const cancelP5 = animateText(
-                            text5, 
-                            (progress) => setParagraph5Progress(progress), 
-                            () => {
-                              // Finally animate the link
-                              const linkText = `Visit notes.krishkrosh.com`;
-                              const cancelLink = animateText(
-                                linkText, 
-                                (progress) => setLinkProgress(progress)
+                      // Add longer pause after second paragraph (1200ms)
+                      setTimeout(() => {
+                        // Continue with subsequent paragraphs
+                        const text3 = `Me? Well I spend most of my time tinkering with technology.`;
+                        const cancelP3 = animateText(
+                          text3, 
+                          (progress) => setParagraph3Progress(progress), 
+                          () => {
+                            // Add longer pause after third paragraph (1200ms)
+                            setTimeout(() => {
+                              const text4 = `Why? Because it reminds me of magic, of course.`;
+                              const cancelP4 = animateText(
+                                text4, 
+                                (progress) => setParagraph4Progress(progress), 
+                                () => {
+                                  // Add longer pause after fourth paragraph (1200ms)
+                                  setTimeout(() => {
+                                    const text5 = `More? Well I guess I could share a couple of my notes with you.`;
+                                    const cancelP5 = animateText(
+                                      text5, 
+                                      (progress) => setParagraph5Progress(progress), 
+                                      () => {
+                                        // Add longer pause before link (1200ms)
+                                        setTimeout(() => {
+                                          // Finally animate the link
+                                          const linkText = `Visit notes.krishkrosh.com`;
+                                          const linkCancel = animateText(
+                                            linkText, 
+                                            (progress) => setLinkProgress(progress)
+                                          );
+                                          addCancelFunction(linkCancel);
+                                        }, 500);
+                                      }
+                                    );
+                                    addCancelFunction(cancelP5);
+                                  }, 500);
+                                }
                               );
-                              addCancelFunction(cancelLink);
-                            }
-                          );
-                          addCancelFunction(cancelP5);
-                        }
-                      );
-                      addCancelFunction(cancelP4);
+                              addCancelFunction(cancelP4);
+                            }, 500);
+                          }
+                        );
+                        addCancelFunction(cancelP3);
+                      }, 500);
                     }
                   );
-                  addCancelFunction(cancelP3);
-                }
-              );
-              addCancelFunction(cancelP2);
-            }
-          );
-          addCancelFunction(cancelP1);
+                  addCancelFunction(cancelP2);
+                }, 500);
+              }
+            );
+            addCancelFunction(cancelP1);
+          }, 500);
         }
       );
       addCancelFunction(cancelTitle);
+      
+      // Add cancellation for the initial setTimeout
+      cancelFunctions.push(() => {
+        clearTimeout(startTimeout);
+      });
     }, 300);
-    
-    // Add the initial timeout to cancellation functions
-    cancelFunctions.push(() => clearTimeout(startTimeout));
     
     // Return function to cancel all animations
     return cancelAllAnimations;
@@ -578,20 +598,50 @@ export default function CardDeckScene() {
 
   // Helper function to render text with character-by-character animation
   const renderAnimatedText = (text: string, progress: number) => {
+    // Split the text into words
+    const words = text.split(/(\s+)/);
+    
     return (
       <>
-        {Array.from(text).map((char, index) => {
-          const charProgress = (index + 1) / text.length;
-          const isVisible = progress >= charProgress;
+        {words.map((word, wordIndex) => {
+          // Calculate the start and end positions of this word in the original text
+          const wordStart = words.slice(0, wordIndex).join('').length;
+          const wordEnd = wordStart + word.length;
+          
+          // Calculate the progress of this word (based on the last character in the word)
+          const wordEndProgress = wordEnd / text.length;
+          
+          // Check if any part of this word should be visible yet
+          const isWordStarted = progress >= (wordStart + 1) / text.length;
+          
           return (
             <span 
-              key={index} 
-              className={`card-info-char ${isVisible ? 'visible' : ''}`}
+              key={wordIndex} 
+              className="word-container"
               style={{
-                transitionDelay: `${index * 20}ms`
+                display: 'inline-block', // Keeps the word together as a unit
+                opacity: isWordStarted ? '1' : '0',
+                marginRight: word.trim() === '' ? '0' : '0.2em' // Add slight spacing between words
               }}
             >
-              {char}
+              {Array.from(word).map((char, charIndex) => {
+                const absoluteCharIndex = wordStart + charIndex;
+                const charProgress = (absoluteCharIndex + 1) / text.length;
+                const isVisible = progress >= charProgress;
+                
+                return (
+                  <span 
+                    key={absoluteCharIndex} 
+                    className={`card-info-char ${isVisible ? 'visible' : ''}`}
+                    style={{
+                      transitionDelay: `${absoluteCharIndex * 20}ms`,
+                      whiteSpace: 'pre' // Preserve spaces
+                    }}
+                  >
+                    {char}
+                  </span>
+                );
+              })}
             </span>
           );
         })}
@@ -719,7 +769,7 @@ export default function CardDeckScene() {
           top: 50%;
           transform: translateY(-50%);
           right: 25%; /* Position in the middle of the right half of the screen */
-          width: 300px; /* Restore proper width */
+          width: 350px; /* Restore proper width */
           z-index: 10;
           font-family: 'Lancelot', serif;
           color: white;
@@ -765,9 +815,7 @@ export default function CardDeckScene() {
           font-size: 2rem;
           margin-bottom: 1.5rem;
           text-align: center;
-          display: flex;
-          flex-wrap: wrap;
-          justify-content: center;
+          display: block;
         }
         
         .card-info-panel p {
@@ -775,8 +823,7 @@ export default function CardDeckScene() {
           font-size: 1.1rem;
           line-height: 1.5;
           margin-bottom: 1rem;
-          display: flex;
-          flex-wrap: wrap;
+          display: block;
         }
         
         .card-info-panel a {
@@ -784,9 +831,8 @@ export default function CardDeckScene() {
           font-style: italic;
           color: #88ccff;
           text-decoration: none;
-          display: flex;
-          flex-wrap: wrap;
-          justify-content: center;
+          display: block;
+          text-align: center;
           margin-top: 1.5rem;
           font-size: 1.2rem;
           transition: color 0.3s ease;
@@ -802,7 +848,6 @@ export default function CardDeckScene() {
           display: inline-block;
           opacity: 0;
           transition: opacity 0.45s ease-out;
-          white-space: pre-wrap;
         }
         
         .card-info-char.visible {
