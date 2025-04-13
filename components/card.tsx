@@ -112,6 +112,7 @@ const doesCardImageExist = (value: string, suit: string, isReal: boolean = false
     "q_hearts",
     "k_hearts",
     // Spades
+    "j_spades",
     "q_spades", 
     "k_spades",
     // Diamonds
@@ -508,7 +509,7 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       } else {
         // On larger screens, position the card on the left
         return {
-          x: -2.5, // Moved more to the left to make room for text
+          x: -1.5, // Moved slightly closer to center (was -2.5)
           y: 0,    // Centered vertically
           z: 0.5,  // Slightly forward
           rotX: 0,
@@ -806,11 +807,11 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       }}
       onPointerUp={(e) => {
         e.stopPropagation();
-        // For mobile devices, a touch is both a pointer down and up event
-        // If we're on mobile, we'll trigger the click handler here explicitly
-        if (expanded) {
-          handleClick();
-        }
+        // We no longer need to call handleClick here,
+        // onClick handles both desktop and mobile reliably.
+        // if (expanded) {
+        //   handleClick();
+        // }
       }}
     >
       {/* Outline effect - only show for expanded cards that are hovered, never for selected cards */}

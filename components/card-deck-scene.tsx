@@ -863,8 +863,13 @@ export default function CardDeckScene() {
           position: absolute;
           top: 50%;
           transform: translateY(-50%);
-          right: 25%; /* Position in the middle of the right half of the screen */
-          width: 350px; /* Restore proper width */
+          /* Position from left, slightly offset to the right */
+          left: 50%; 
+          margin-left: 100px; /* Push right from center */
+          /* Remove right/margin-right */
+          /* right: 40%; */ 
+          /* margin-right: -175px; */
+          width: 400px; 
           z-index: 10;
           font-family: 'Lancelot', serif;
           color: white;
@@ -872,32 +877,17 @@ export default function CardDeckScene() {
           opacity: 0;
           transition: opacity 1s ease-in-out;
           pointer-events: none;
-          /* Center the panel horizontally in its position */
-          margin-right: -150px; /* Half the width to center it */
         }
         
-        /* Responsive positioning for different screen sizes */
+        /* Responsive positioning for larger tablets/small desktops */
         @media (max-width: 1200px) {
           .card-info-panel {
-            right: 20%;
-          }
-        }
-        
-        @media (max-width: 768px) {
-          .card-info-panel {
-            right: 50%;
-            margin-right: -150px;
-            top: 65%; /* Move down on smaller screens */
-          }
-        }
-        
-        @media (max-width: 640px) {
-          .card-info-panel {
-            right: 50%;
-            margin-right: -150px;
-            top: 70%; /* Move further down on mobile */
-            width: 280px;
-            margin-right: -140px;
+            /* Adjust left positioning for tablets */
+            left: 50%; 
+            margin-left: 30px; /* Closer to center on smaller screens */
+            /* Remove right/margin-right */
+            /* right: 35%; */ 
+            /* margin-right: -175px; */
           }
         }
         
@@ -907,7 +897,7 @@ export default function CardDeckScene() {
         }
         
         .card-info-panel h2 {
-          font-size: 2rem;
+          font-size: 2.2rem; /* Increased size */
           margin-bottom: 1.5rem;
           text-align: center;
           display: block;
@@ -915,10 +905,11 @@ export default function CardDeckScene() {
         
         .card-info-panel p {
           font-family: 'Overlock', sans-serif;
-          font-size: 1.1rem;
+          font-size: 1.2rem; /* Increased size */
           line-height: 1.5;
           margin-bottom: 1rem;
           display: block;
+          text-align: left; 
         }
         
         .card-info-panel a {
@@ -929,10 +920,10 @@ export default function CardDeckScene() {
           display: block;
           text-align: center;
           margin-top: 1.5rem;
-          font-size: 1.2rem;
+          font-size: 1.3rem; /* Increased size */
           transition: color 0.3s ease;
           pointer-events: auto;
-          cursor: pointer; /* Add cursor pointer only to links */
+          cursor: pointer; 
         }
         
         .card-info-panel a:hover {
@@ -950,22 +941,43 @@ export default function CardDeckScene() {
           opacity: 1;
         }
         
-        @media (max-width: 768px) {
+        /* Consolidated Mobile Styles (Tablets and Phones) */
+        @media (max-width: 768px) { 
           .card-info-panel {
-            top: auto;
-            bottom: 10%;
-            right: 50%;
-            transform: translateX(50%);
-            width: 80%;
-            max-width: 300px;
+            /* Override desktop positioning */
+            top: auto; 
+            right: auto;
+            margin-right: 0; 
+
+            /* Center horizontally */
+            left: 50%; 
+            transform: translateX(-50%); 
+            
+            /* Position from bottom */
+            bottom: 5%; 
+            
+            /* Responsive width */
+            width: 90%; 
+            max-width: 350px; /* Limit maximum width */
+
+            /* Ensure text alignment is centered on mobile (overrides p style) */
+            text-align: center;
           }
           
           .card-info-panel h2 {
-            font-size: 1.8rem;
+            font-size: 1.6rem; /* Slightly smaller heading */
+            margin-bottom: 1rem;
           }
           
           .card-info-panel p {
-            font-size: 1rem;
+            font-size: 0.95rem; /* Smaller paragraph text */
+            line-height: 1.4;
+            margin-bottom: 0.8rem;
+          }
+
+          .card-info-panel a {
+            font-size: 1rem; /* Smaller link text */
+            margin-top: 1rem;
           }
         }
         
