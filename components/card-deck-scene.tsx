@@ -482,109 +482,91 @@ export default function CardDeckScene() {
     setParagraph5Progress(0);
     setLinkProgress(0);
     
-    // Store active animation cancellation functions
+    // Store active animation cancellation functions and timeouts
     const cancelFunctions: (() => void)[] = [];
+    const timeouts: NodeJS.Timeout[] = [];
     
-    // Helper to add cancellation function and clean up previous ones
-    const addCancelFunction = (fn: () => void) => {
-      cancelFunctions.push(fn);
-    };
+    // Define content structure with text and associated progress setter
+    const cardName = getCardName(cardId);
+    const contentItems = [
+      {
+        text: cardName,
+        setProgress: setTitleProgress,
+        delay: 800, // Delay after this item completes before starting next
+      },
+      {
+        text: `Ah yes. The ${cardName}. Beautiful isn't it?`,
+        setProgress: setParagraph1Progress,
+        delay: 1000,
+      },
+      {
+        text: `It reminds me of you. It came all the way from ${userLocation}.`,
+        setProgress: setParagraph2Progress,
+        delay: 1000,
+      },
+      {
+        text: `Me? Well I spend most of my time tinkering with technology.`,
+        setProgress: setParagraph3Progress,
+        delay: 1000,
+      },
+      {
+        text: `Why? Because it reminds me of magic, of course.`,
+        setProgress: setParagraph4Progress,
+        delay: 1000,
+      },
+      {
+        text: `More? Well I guess I could share a couple of my notes with you.`,
+        setProgress: setParagraph5Progress,
+        delay: 1000,
+      },
+      {
+        text: `Visit notes.krishkrosh.com`,
+        setProgress: setLinkProgress,
+        delay: 0, // No delay needed after the last item
+      },
+    ];
     
-    // Cancel all animations if component unmounts or card is deselected
-    const cancelAllAnimations = () => {
-      cancelFunctions.forEach(cancel => cancel());
-      cancelFunctions.length = 0;
-    };
-    
-    // Wait a moment before starting animation
-    const startTimeout = setTimeout(() => {
-      const cardName = getCardName(cardId);
+    // Function to animate items in sequence
+    const animateSequence = (index = 0) => {
+      if (index >= contentItems.length) return;
       
-      // Animate title (card name)
-      const cancelTitle = animateText(
-        cardName, 
-        (progress) => setTitleProgress(progress), 
+      const item = contentItems[index];
+      
+      // Create animation for current item
+      const cancelAnimation = animateText(
+        item.text,
+        item.setProgress,
         () => {
-          // Add longer pause after title (1200ms instead of 800ms)
-          setTimeout(() => {
-            // After title completes, animate first paragraph
-            const text1 = `Ah yes. The ${cardName}. Beautiful isn't it?`;
-            const cancelP1 = animateText(
-              text1, 
-              (progress) => setParagraph1Progress(progress), 
-              () => {
-                // Add longer pause after first paragraph (1200ms)
-                setTimeout(() => {
-                  // After first paragraph, animate second
-                  const text2 = `It reminds me of you. It came all the way from ${userLocation}.`;
-                  const cancelP2 = animateText(
-                    text2, 
-                    (progress) => setParagraph2Progress(progress), 
-                    () => {
-                      // Add longer pause after second paragraph (1200ms)
-                      setTimeout(() => {
-                        // Continue with subsequent paragraphs
-                        const text3 = `Me? Well I spend most of my time tinkering with technology.`;
-                        const cancelP3 = animateText(
-                          text3, 
-                          (progress) => setParagraph3Progress(progress), 
-                          () => {
-                            // Add longer pause after third paragraph (1200ms)
-                            setTimeout(() => {
-                              const text4 = `Why? Because it reminds me of magic, of course.`;
-                              const cancelP4 = animateText(
-                                text4, 
-                                (progress) => setParagraph4Progress(progress), 
-                                () => {
-                                  // Add longer pause after fourth paragraph (1200ms)
-                                  setTimeout(() => {
-                                    const text5 = `More? Well I guess I could share a couple of my notes with you.`;
-                                    const cancelP5 = animateText(
-                                      text5, 
-                                      (progress) => setParagraph5Progress(progress), 
-                                      () => {
-                                        // Add longer pause before link (1200ms)
-                                        setTimeout(() => {
-                                          // Finally animate the link
-                                          const linkText = `Visit notes.krishkrosh.com`;
-                                          const linkCancel = animateText(
-                                            linkText, 
-                                            (progress) => setLinkProgress(progress)
-                                          );
-                                          addCancelFunction(linkCancel);
-                                        }, 500);
-                                      }
-                                    );
-                                    addCancelFunction(cancelP5);
-                                  }, 500);
-                                }
-                              );
-                              addCancelFunction(cancelP4);
-                            }, 500);
-                          }
-                        );
-                        addCancelFunction(cancelP3);
-                      }, 500);
-                    }
-                  );
-                  addCancelFunction(cancelP2);
-                }, 500);
-              }
-            );
-            addCancelFunction(cancelP1);
-          }, 500);
+          // Schedule next item after delay
+          if (index < contentItems.length - 1) {
+            const timeout = setTimeout(() => {
+              animateSequence(index + 1);
+            }, item.delay);
+            
+            timeouts.push(timeout);
+          }
         }
       );
-      addCancelFunction(cancelTitle);
       
-      // Add cancellation for the initial setTimeout
-      cancelFunctions.push(() => {
-        clearTimeout(startTimeout);
-      });
+      // Add animation cancellation to our list
+      cancelFunctions.push(cancelAnimation);
+    };
+    
+    // Start animation sequence after initial delay
+    const startTimeout = setTimeout(() => {
+      animateSequence();
     }, 300);
     
-    // Return function to cancel all animations
-    return cancelAllAnimations;
+    timeouts.push(startTimeout);
+    
+    // Return function to cancel all animations and clear timeouts
+    return () => {
+      // Cancel all active animations
+      cancelFunctions.forEach(cancel => cancel());
+      
+      // Clear all pending timeouts
+      timeouts.forEach(timeout => clearTimeout(timeout));
+    };
   };
 
   // Helper function to get card name based on card ID
