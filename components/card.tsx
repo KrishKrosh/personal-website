@@ -3,8 +3,9 @@
 import { useRef, useState, useMemo, useEffect } from "react"
 import { useFrame, useThree } from "@react-three/fiber"
 import { MeshStandardMaterial, DoubleSide, Vector3, Group, Shape, ExtrudeGeometry, 
-         MeshBasicMaterial, Euler, Quaternion, Matrix4 } from "three"
-import { Text } from "@react-three/drei"
+         MeshBasicMaterial, Euler, Quaternion, Matrix4, TextureLoader, ShaderMaterial,
+         PlaneGeometry } from "three"
+import { Text, useTexture } from "@react-three/drei"
 
 // Card suits and values
 const suits = ["♠", "♥", "♦", "♣"]
@@ -57,6 +58,60 @@ const createRoundedRectShape = (width: number, height: number, radius: number) =
   return shape
 }
 
+// Function to get the card image path based on value and suit
+const getCardImagePath = (value: string, suit: string): string => {
+  // Map to the correct filename format
+  const valueMap: { [key: string]: string } = {
+    "J": "j",
+    "Q": "q",
+    "K": "k"
+  };
+  
+  const suitMap: { [key: string]: string } = {
+    "♠": "spades",
+    "♥": "hearts",
+    "♦": "diamonds",
+    "♣": "clubs"
+  };
+  
+  // Use the mapped values if they exist, otherwise use the original value
+  const mappedValue = valueMap[value] || value.toLowerCase();
+  const mappedSuit = suitMap[suit];
+  
+  return `/cards/${mappedValue}_${mappedSuit}.png`;
+}
+
+// Function to check if a specific card image exists
+// This is intentionally limited to only the cards we know exist
+const doesCardImageExist = (value: string, suit: string): boolean => {
+  // We only have these specific cards available
+  const availableCards = [
+    "j_hearts",
+    "q_hearts",
+    "k_hearts", 
+    "k_spades"
+  ];
+  
+  const valueMap: { [key: string]: string } = {
+    "J": "j",
+    "Q": "q",
+    "K": "k"
+  };
+  
+  const suitMap: { [key: string]: string } = {
+    "♠": "spades",
+    "♥": "hearts",
+    "♦": "diamonds",
+    "♣": "clubs"
+  };
+  
+  const mappedValue = valueMap[value] || value.toLowerCase();
+  const mappedSuit = suitMap[suit];
+  const cardKey = `${mappedValue}_${mappedSuit}`;
+  
+  return availableCards.includes(cardKey);
+}
+
 export default function Card({ card, hovered, expanded, isSelected = false, allCardsSelected = false, onSelect }: CardProps) {
   const meshRef = useRef<Group>(null)
   const [suit] = useState(suits[Math.floor(card.id / 13)])
@@ -91,6 +146,102 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
   const height = 2
   const cornerRadius = 0.12
   const thickness = 0.01
+
+  // Check if this card has a custom image available
+  const hasCustomImage = useMemo(() => doesCardImageExist(value, suit), [value, suit]);
+  
+  // Get card image path - only if we know the image exists
+  const cardImagePath = useMemo(() => {
+    if (hasCustomImage) {
+      return getCardImagePath(value, suit);
+    }
+    return "";
+  }, [value, suit, hasCustomImage]);
+  
+  // Only load texture if we know the image exists
+  const cardTexture = hasCustomImage ? useTexture(cardImagePath) : null;
+
+  // Image aspect ratio tracking
+  const [imageAspectRatio, setImageAspectRatio] = useState(1);
+
+  // Update image aspect ratio once loaded
+  useEffect(() => {
+    if (cardTexture && cardTexture.image) {
+      setImageAspectRatio(cardTexture.image.width / cardTexture.image.height);
+      
+      // Basic texture settings for better quality
+      cardTexture.anisotropy = 16;
+    }
+  }, [cardTexture]);
+  
+  // Create a custom shader material for the card face that will properly display the texture
+  // while respecting rounded corners
+  const cardFaceMaterial = useMemo(() => {
+    if (!cardTexture) return null;
+    
+    return new ShaderMaterial({
+      uniforms: {
+        map: { value: cardTexture },
+        cardSize: { value: new Vector3(width, height, 0) },
+        cornerRadius: { value: cornerRadius },
+        imageAspectRatio: { value: cardTexture.image ? cardTexture.image.width / cardTexture.image.height : 1.0 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D map;
+        uniform vec3 cardSize;
+        uniform float cornerRadius;
+        uniform float imageAspectRatio;
+        varying vec2 vUv;
+        
+        void main() {
+          // Convert UV from 0-1 range to actual card dimensions
+          vec2 cardPoint = vec2(
+            (vUv.x - 0.5) * cardSize.x,
+            (vUv.y - 0.5) * cardSize.y
+          );
+          
+          // Calculate distance from each corner
+          float topRight = length(max(vec2(0.0), cardPoint - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+          float topLeft = length(max(vec2(0.0), vec2(-cardPoint.x, cardPoint.y) - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+          float bottomRight = length(max(vec2(0.0), vec2(cardPoint.x, -cardPoint.y) - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+          float bottomLeft = length(max(vec2(0.0), -cardPoint - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+          
+          // If we're in any corner and outside the radius, discard the fragment
+          if (topRight > cornerRadius || topLeft > cornerRadius || 
+              bottomRight > cornerRadius || bottomLeft > cornerRadius) {
+            discard;
+          }
+          
+          // Calculate adjusted UVs to maintain aspect ratio while filling the card
+          vec2 adjustedUV = vUv;
+          float cardAspectRatio = cardSize.x / cardSize.y;
+          
+          if (imageAspectRatio > cardAspectRatio) {
+            // Image is wider than card - scale to match height
+            float scale = cardAspectRatio / imageAspectRatio;
+            adjustedUV.x = (vUv.x - 0.5) * scale + 0.5;
+          } else {
+            // Image is taller than card - scale to match width
+            float scale = imageAspectRatio / cardAspectRatio;
+            adjustedUV.y = (vUv.y - 0.5) * scale + 0.5;
+          }
+          
+          // Sample the texture using the adjusted UVs
+          gl_FragColor = texture2D(map, adjustedUV);
+        }
+      `,
+      transparent: true,
+      side: DoubleSide
+    });
+  }, [cardTexture, width, height, cornerRadius]);
 
   // Create card geometry
   const cardGeometry = useMemo(() => {
@@ -503,7 +654,7 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
         </mesh>
       )}
 
-      {/* Card face - simplified with better material settings for improved performance */}
+      {/* Card face - use white for the base */}
       <mesh geometry={cardGeometry} renderOrder={0}>
         <meshStandardMaterial 
           color="#ffffff" 
@@ -513,64 +664,76 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
         />
       </mesh>
 
-      {/* Card face text/symbols rendered directly on the card */}
+      {/* Card face content - either textured image or standard text */}
       <group position={[0, 0, thickness + 0.001]} renderOrder={2}>
-        {/* Center symbol - larger for non-numeric cards */}
-        <Text
-          position={[0, 0, 0]}
-          fontSize={value === "A" || value === "J" || value === "Q" || value === "K" ? 0.8 : 0.6}
-          color={isRed ? "#cc0000" : "#000000"}
-          anchorX="center"
-          anchorY="middle"
-        >
-          {value === "A" ? suit :
-           value === "J" ? "J" :
-           value === "Q" ? "Q" :
-           value === "K" ? "K" : 
-           suit}
-        </Text>
+        {/* Use the custom texture for the card face if available */}
+        {hasCustomImage && cardTexture && cardFaceMaterial ? (
+          // Use a standard plane with our custom shader material
+          <mesh>
+            <planeGeometry args={[width - 0.01, height - 0.01]} />
+            <primitive object={cardFaceMaterial} attach="material" />
+          </mesh>
+        ) : (
+          // Fallback to the original text-based card face
+          <>
+            {/* Center symbol - larger for non-numeric cards */}
+            <Text
+              position={[0, 0, 0]}
+              fontSize={value === "A" || value === "J" || value === "Q" || value === "K" ? 0.8 : 0.6}
+              color={isRed ? "#cc0000" : "#000000"}
+              anchorX="center"
+              anchorY="middle"
+            >
+              {value === "A" ? suit :
+              value === "J" ? "J" :
+              value === "Q" ? "Q" :
+              value === "K" ? "K" : 
+              suit}
+            </Text>
 
-        {/* Top left value and suit */}
-        <Text
-          position={[-cornerPosition, 0.85, 0]}
-          fontSize={valueFontSize}
-          color={isRed ? "#cc0000" : "#000000"}
-          anchorX="center"
-          anchorY="middle"
-        >
-          {value}
-        </Text>
-        <Text
-          position={[-cornerPosition, 0.65, 0]}
-          fontSize={0.2}
-          color={isRed ? "#cc0000" : "#000000"}
-          anchorX="center"
-          anchorY="middle"
-        >
-          {suit}
-        </Text>
+            {/* Top left value and suit */}
+            <Text
+              position={[-cornerPosition, 0.85, 0]}
+              fontSize={valueFontSize}
+              color={isRed ? "#cc0000" : "#000000"}
+              anchorX="center"
+              anchorY="middle"
+            >
+              {value}
+            </Text>
+            <Text
+              position={[-cornerPosition, 0.65, 0]}
+              fontSize={0.2}
+              color={isRed ? "#cc0000" : "#000000"}
+              anchorX="center"
+              anchorY="middle"
+            >
+              {suit}
+            </Text>
 
-        {/* Bottom right value and suit (upside down) */}
-        <Text
-          position={[cornerPosition, -0.85, 0]}
-          fontSize={valueFontSize}
-          color={isRed ? "#cc0000" : "#000000"}
-          anchorX="center"
-          anchorY="middle"
-          rotation={[0, 0, Math.PI]}
-        >
-          {value}
-        </Text>
-        <Text
-          position={[cornerPosition, -0.65, 0]}
-          fontSize={0.2}
-          color={isRed ? "#cc0000" : "#000000"}
-          anchorX="center"
-          anchorY="middle"
-          rotation={[0, 0, Math.PI]}
-        >
-          {suit}
-        </Text>
+            {/* Bottom right value and suit (upside down) */}
+            <Text
+              position={[cornerPosition, -0.85, 0]}
+              fontSize={valueFontSize}
+              color={isRed ? "#cc0000" : "#000000"}
+              anchorX="center"
+              anchorY="middle"
+              rotation={[0, 0, Math.PI]}
+            >
+              {value}
+            </Text>
+            <Text
+              position={[cornerPosition, -0.65, 0]}
+              fontSize={0.2}
+              color={isRed ? "#cc0000" : "#000000"}
+              anchorX="center"
+              anchorY="middle"
+              rotation={[0, 0, Math.PI]}
+            >
+              {suit}
+            </Text>
+          </>
+        )}
       </group>
 
       {/* Card back design - simplified */}
