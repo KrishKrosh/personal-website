@@ -318,6 +318,31 @@ export default function CardDeckScene() {
   // Reference to the canvas container
   const containerRef = useRef<HTMLDivElement>(null)
   
+  // Reference to track the current animation cycle - each new card gets a unique ID
+  const animationCycleRef = useRef<number>(0)
+  
+  // Store all timers in a ref to ensure we can clear them all during cleanup
+  const allTimersRef = useRef<NodeJS.Timeout[]>([])
+  
+  // Function to safely set up a timer that we can track and clean up
+  const safeSetTimeout = (callback: () => void, delay: number): NodeJS.Timeout => {
+    const timer = setTimeout(() => {
+      // Remove this timer from the list when it executes
+      allTimersRef.current = allTimersRef.current.filter(t => t !== timer)
+      callback()
+    }, delay)
+    
+    // Add timer to our list
+    allTimersRef.current.push(timer)
+    return timer
+  }
+  
+  // Function to clear all active timers
+  const clearAllTimers = () => {
+    allTimersRef.current.forEach(timer => clearTimeout(timer))
+    allTimersRef.current = []
+  }
+  
   // Get mystical text and interaction permission
   const { mysticalTextContent, allowInteraction, fadeOutAndHide, showOnlyPickCardLine } = MysticalText()
 
@@ -447,30 +472,28 @@ export default function CardDeckScene() {
   }
 
   // Generic function to animate text character by character with better completion tracking
-  const animateText = (text: string, setProgress: (progress: number) => void, onComplete?: () => void) => {
+  const animateText = (text: string, setProgress: (progress: number) => void, cycleId: number, onComplete?: () => void) => {
     let charIndex = 0;
-    let isComplete = false;
-    let isCancelled = false;
-    let animationTimer: NodeJS.Timeout | null = null;
     
-    // Reset progress at the start
+    // Force immediate reset
     setProgress(0);
     
     const animate = () => {
-      if (isComplete || isCancelled) return;
+      // Check if this animation has been superseded by a new cycle
+      if (cycleId !== animationCycleRef.current) return;
       
       if (charIndex >= text.length) {
-        isComplete = true;
-        // Ensure progress is set to 1 (100%) at completion
+        // We've finished
         setProgress(1);
         
-        // Delay before calling onComplete to ensure visual separation between sections
-        if (onComplete && !isCancelled) {
-          animationTimer = setTimeout(() => {
-            if (!isCancelled) {
+        // Schedule the completion callback after a delay
+        if (onComplete) {
+          safeSetTimeout(() => {
+            // Double-check cycle is still valid before calling completion
+            if (cycleId === animationCycleRef.current) {
               onComplete();
             }
-          }, 800); // Longer delay for better separation
+          }, 800);
         }
         return;
       }
@@ -478,13 +501,10 @@ export default function CardDeckScene() {
       charIndex++;
       setProgress(charIndex / text.length);
       
-      // Determine next character delay based on punctuation
+      // Determine delay based on punctuation
       let nextCharDelay = 30; // Base delay
-      
-      // Current character for delay calculation
       const currentChar = text[charIndex - 1];
       
-      // Check for different punctuation marks
       if (currentChar === '.') {
         nextCharDelay = 450; // Longer pause after periods
       } else if (currentChar === ',') {
@@ -497,37 +517,30 @@ export default function CardDeckScene() {
         nextCharDelay = 400; // Pause after exclamation marks
       }
       
-      // Schedule next character animation
-      if (!isCancelled) {
-        animationTimer = setTimeout(animate, nextCharDelay);
-      }
+      // Schedule next character animation only if we're still in the same animation cycle
+      safeSetTimeout(() => {
+        if (cycleId === animationCycleRef.current) {
+          animate();
+        }
+      }, nextCharDelay);
     };
     
-    // Start the animation
-    animate();
-    
-    // Return cancellation function
-    return () => {
-      isCancelled = true;
-      if (animationTimer) {
-        clearTimeout(animationTimer);
-        animationTimer = null;
+    // Start the animation after a brief delay to ensure cleanup from previous animations
+    safeSetTimeout(() => {
+      if (cycleId === animationCycleRef.current) {
+        animate();
       }
-      isComplete = true;
-      
-      // Reset progress to ensure clean state when cancelled
-      setProgress(0);
-    };
+    }, 50);
   };
 
   // Function to animate card text with better sequencing
   const animateCardText = (cardId: number) => {
-    // Reset all progress values to ensure a clean state
-    resetAllAnimationProgress();
+    // Generate a new animation cycle ID
+    const thisCycleId = ++animationCycleRef.current;
     
-    // Store active animation cancellation functions and timeouts
-    const cancelFunctions: (() => void)[] = [];
-    const timeouts: NodeJS.Timeout[] = [];
+    // Clear any previous timers and reset states
+    clearAllTimers();
+    resetAllAnimationProgress();
     
     // Define content structure with text and associated progress setter
     const cardName = getCardName(cardId);
@@ -570,67 +583,54 @@ export default function CardDeckScene() {
       },
     ];
     
-    // Flag to track if this animation sequence has been cancelled
-    let isCancelled = false;
-    
     // Function to animate items in sequence
     const animateSequence = (index = 0) => {
-      if (isCancelled || index >= contentItems.length) return;
+      if (index >= contentItems.length || thisCycleId !== animationCycleRef.current) return;
       
       const item = contentItems[index];
       
-      // Create animation for current item
-      const cancelAnimation = animateText(
+      // Animate current item and set up the next one when it completes
+      animateText(
         item.text,
         item.setProgress,
+        thisCycleId,
         () => {
-          // Schedule next item after delay
-          if (!isCancelled && index < contentItems.length - 1) {
-            const timeout = setTimeout(() => {
-              animateSequence(index + 1);
+          // Only schedule next item if we're still in the same animation cycle
+          if (thisCycleId === animationCycleRef.current && index < contentItems.length - 1) {
+            safeSetTimeout(() => {
+              if (thisCycleId === animationCycleRef.current) {
+                animateSequence(index + 1);
+              }
             }, item.delay);
-            
-            timeouts.push(timeout);
           }
         }
       );
-      
-      // Add animation cancellation to our list
-      cancelFunctions.push(cancelAnimation);
     };
     
     // Start animation sequence after initial delay
-    const startTimeout = setTimeout(() => {
-      if (!isCancelled) {
+    safeSetTimeout(() => {
+      if (thisCycleId === animationCycleRef.current) {
         animateSequence();
       }
-    }, 300);
-    
-    timeouts.push(startTimeout);
-    
-    // Return function to cancel all animations and clear timeouts
-    return () => {
-      // Mark as cancelled to prevent starting new animations
-      isCancelled = true;
-      
-      // Cancel all active animations
-      cancelFunctions.forEach(cancel => cancel());
-      
-      // Clear all pending timeouts
-      timeouts.forEach(timeout => clearTimeout(timeout));
-      
-      // Reset all progress values immediately to ensure clean state
-      resetAllAnimationProgress();
-    };
+    }, 350);
   };
 
   // Helper function to get card name based on card ID
   const getCardName = (cardId: number): string => {
     const suits = ["♠", "♥", "♦", "♣"]
+    const suitNames = ["Spades", "Hearts", "Diamonds", "Clubs"]
+    
+    // Full value names instead of abbreviations
     const values = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
-    const suit = suits[Math.floor(cardId / 13)]
-    const value = values[cardId % 13]
-    return `${value} of ${suit === "♠" ? "Spades" : suit === "♥" ? "Hearts" : suit === "♦" ? "Diamonds" : "Clubs"}`
+    const fullValueNames = ["Ace", "2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King"]
+    
+    const suitIndex = Math.floor(cardId / 13)
+    const valueIndex = cardId % 13
+    
+    const suit = suitNames[suitIndex]
+    const value = fullValueNames[valueIndex]
+    
+    return `${value} of ${suit}`
   }
 
   // Helper function to render text with character-by-character animation
@@ -732,30 +732,28 @@ export default function CardDeckScene() {
   // Handle card selection state change
   const handleCardSelectionChange = (isSelected: boolean, cardId?: number | null): void => {
     // Update selection state
-    setCardSelected(isSelected)
-    setSelectedCardId(cardId ?? null)
+    setCardSelected(isSelected);
+    setSelectedCardId(cardId ?? null);
     
-    // Cancel any existing animations
-    if (cancelAnimations) {
-      cancelAnimations();
-      setCancelAnimations(null);
-    }
+    // Create a new animation cycle which will invalidate any ongoing animations
+    animationCycleRef.current++;
+    clearAllTimers();
     
     // Force reset of all animation progress states to ensure clean state
     resetAllAnimationProgress();
     
     // Hide the mystical text when a card is selected
     if (isSelected && cardId !== null && cardId !== undefined) {
-      fadeOutAndHide()
-      // Start fade-in animation after a small delay
-      setTimeout(() => {
-        setPanelFadeIn(true)
-        // Start character-by-character animation and store cancellation function
-        const cancelFn = animateCardText(cardId);
-        setCancelAnimations(() => cancelFn);
-      }, 300)
+      fadeOutAndHide();
+      
+      // Start fade-in animation after a delay to ensure previous animations are completely cleared
+      safeSetTimeout(() => {
+        setPanelFadeIn(true);
+        // Start the new animation sequence
+        animateCardText(cardId);
+      }, 400); // Even longer delay to ensure clean state
     } else {
-      setPanelFadeIn(false)
+      setPanelFadeIn(false);
     }
   }
 
