@@ -4,6 +4,7 @@ import { useRef, useMemo, useState, useEffect } from "react"
 import { useFrame } from "@react-three/fiber"
 import { MathUtils, Vector3, Group } from "three"
 import Card from "./card"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 // Define props interface for CardDeck
 interface CardDeckProps {
@@ -26,6 +27,7 @@ interface CardData {
 
 export default function CardDeck({ hovered, expanded, onSelectionChange }: CardDeckProps) {
   const groupRef = useRef<Group>(null)
+  const isMobile = useIsMobile()
   
   // Define specific cards to include (aces, kings, queens, jacks, eights, and threes)
   const specificCardValues = [0, 2, 7, 10, 11, 12]; // Indices for A, 3, 8, J, Q, K in the values array
@@ -82,7 +84,7 @@ export default function CardDeck({ hovered, expanded, onSelectionChange }: CardD
           // Random rotation for when expanded
           rotation: [Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2],
           // Radius for the globe formation
-          radius: 4 + Math.random() * 1.0, // Range [3, 4] - Reduced for denser packing
+          radius: isMobile ? 3 + Math.random() * 1.5 : 4 + Math.random() * 1.5, // Range [3, 4] - Reduced for denser packing
           // Random speed for rotation - reduced for better performance
           speed: 0.1 + Math.random() * 0.2,
           // Random phase for varied movement
