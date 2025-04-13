@@ -884,7 +884,7 @@ export default function CardDeckScene() {
           .card-info-panel {
             /* Adjust left positioning for tablets */
             left: 50%; 
-            margin-left: 30px; /* Closer to center on smaller screens */
+            margin-left: 0px; /* Closer to center on smaller screens */
             /* Remove right/margin-right */
             /* right: 35%; */ 
             /* margin-right: -175px; */
@@ -973,6 +973,7 @@ export default function CardDeckScene() {
             font-size: 0.95rem; /* Smaller paragraph text */
             line-height: 1.4;
             margin-bottom: 0.8rem;
+            text-align: center; /* Ensure paragraphs are centered on mobile */
           }
 
           .card-info-panel a {

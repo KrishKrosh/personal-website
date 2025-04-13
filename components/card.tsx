@@ -500,7 +500,7 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
         // On small screens, position the card centered and higher up
         return {
           x: 0,
-          y: 2,
+          y: 1.5, // Lowered card position (was 2)
           z: 0.5,
           rotX: 0,
           rotY: Math.PI * 0.1, // Slight turn for 3D effect
