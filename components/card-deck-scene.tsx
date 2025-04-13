@@ -305,6 +305,7 @@ export default function CardDeckScene() {
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null)
   const [cursorPosition, setCursorPosition] = useState<{ x: number, y: number }>({ x: 0, y: 0 })
   const [panelFadeIn, setPanelFadeIn] = useState<boolean>(false)
+  const [isMobile, setIsMobile] = useState<boolean>(false)
   
   // State for character-by-character animation
   const [titleProgress, setTitleProgress] = useState<number>(0)
@@ -426,6 +427,27 @@ export default function CardDeckScene() {
     getUserLocation().then(location => setUserLocation(location));
   }, []);
 
+  // Detect if the device is mobile on component mount
+  useEffect(() => {
+    const checkIfMobile = () => {
+      const userAgent = typeof window.navigator === 'undefined' ? '' : navigator.userAgent;
+      const mobile = Boolean(
+        userAgent.match(/Android|BlackBerry|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i)
+      );
+      setIsMobile(mobile);
+    };
+    
+    checkIfMobile();
+    
+    // Also add a listener for window resizing to detect device changes
+    const handleResize = () => {
+      checkIfMobile();
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Handle mouse movement over the canvas
   const handlePointerMove = (event: React.PointerEvent): void => {
     if (containerRef.current) {
@@ -439,24 +461,41 @@ export default function CardDeckScene() {
       // Update cursor position state
       setCursorPosition({ x, y })
       
-      // Calculate distance from cursor to the center (where the card deck is)
-      // The card deck is positioned at (0,0,0) in the scene
-      const distance = Math.sqrt(x * x + y * y)
-      
-      // Only trigger hover when cursor is within a reasonable distance of the card deck
-      // AND when interaction is allowed (after the final text line)
-      const hoverDistance = 0.5
-      
-      if (distance < hoverDistance && !hovered && allowInteraction) {
-        setHovered(true)
+      // Only do hover detection on desktop devices
+      if (!isMobile) {
+        // Calculate distance from cursor to the center (where the card deck is)
+        // The card deck is positioned at (0,0,0) in the scene
+        const distance = Math.sqrt(x * x + y * y)
+        
+        // Only trigger hover when cursor is within a reasonable distance of the card deck
+        // AND when interaction is allowed (after the final text line)
+        const hoverDistance = 0.5
+        
+        if (distance < hoverDistance && !hovered && allowInteraction) {
+          setHovered(true)
 
-        // After a delay, trigger the expanded state
-        setTimeout(() => {
-          setExpanded(true)
-          // When cards explode, show only the last line
-          showOnlyPickCardLine()
-        }, 1500)
+          // After a delay, trigger the expanded state
+          setTimeout(() => {
+            setExpanded(true)
+            // When cards explode, show only the last line
+            showOnlyPickCardLine()
+          }, 1500)
+        }
       }
+    }
+  }
+
+  // Handle click/tap anywhere on the screen (primarily for mobile)
+  const handleClick = () => {
+    if (isMobile && !hovered && allowInteraction) {
+      setHovered(true)
+      
+      // After a delay, trigger the expanded state
+      setTimeout(() => {
+        setExpanded(true)
+        // When cards explode, show only the last line
+        showOnlyPickCardLine()
+      }, 1500)
     }
   }
 
@@ -758,11 +797,22 @@ export default function CardDeckScene() {
   }
 
   return (
-    <div 
+    <div
       ref={containerRef}
-      className="h-screen w-full relative" 
+      className="relative h-full w-full"
       onPointerMove={handlePointerMove}
+      onClick={handleClick} // Add click handler for mobile
     >
+      {/* Context lost message */}
+      {contextLost && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 text-white">
+          <div className="rounded-lg bg-black/90 p-6 text-center">
+            <h2 className="mb-4 text-xl font-semibold">Recovering WebGL context...</h2>
+            <p>The 3D environment is reloading. This should only take a moment.</p>
+          </div>
+        </div>
+      )}
+
       <style jsx global>{`
         @keyframes fadeIn {
           0% { 
@@ -931,23 +981,25 @@ export default function CardDeckScene() {
         </div>
       ) : (
         <>
-          <Canvas 
-            shadows 
-            camera={{ position: [0, 0, 8], fov: 50 }}
+          <Canvas
+            gl={{ 
+              antialias: !isMobile, // Disable antialiasing on mobile
+              powerPreference: "high-performance",
+              alpha: true,
+              depth: true,
+              stencil: false,
+              precision: isMobile ? "lowp" : "highp", // Lower precision on mobile
+            }}
+            camera={{ position: [0, 0, 8], fov: 40 }}
+            dpr={isMobile ? [1, 1.5] : [1, 2]} // Lower pixel ratio on mobile
+            performance={{ min: 0.1 }}
+            shadows={!isMobile} // Disable shadows on mobile
             onCreated={({ gl }) => {
               // Add event listener for context lost
               gl.domElement.addEventListener('webglcontextlost', handleContextLost, false);
             }}
-            gl={{ 
-              powerPreference: 'high-performance',
-              antialias: false, // Disable antialiasing for better performance
-              depth: true,
-              stencil: false, // Disable stencil buffer if not needed
-              alpha: false // Disable alpha for better performance
-            }}
-            dpr={[1, 1.5]} // Limit pixel ratio for better performance
           >
-            {/* Background that follows the camera */}
+            {/* CameraBackground follows the camera to create an infinite background */}
             <CameraBackground pauseAnimations={cardSelected} />
             
             {/* Ambient light for base illumination */}
@@ -979,7 +1031,7 @@ export default function CardDeckScene() {
             <Environment preset="night" />
 
             {/* Scene Controls */}
-            <SceneController expanded={expanded} cardSelected={cardSelected} />
+            <SceneController expanded={expanded} cardSelected={cardSelected} isMobile={isMobile} />
           </Canvas>
           
           {/* Card Info Panel (HTML overlay) with character-by-character animation */}
@@ -1025,13 +1077,14 @@ export default function CardDeckScene() {
 interface SceneControllerProps {
   expanded: boolean;
   cardSelected: boolean;
+  isMobile: boolean;
 }
 
-function SceneController({ expanded, cardSelected }: SceneControllerProps) {
+function SceneController({ expanded, cardSelected, isMobile }: SceneControllerProps) {
   const { camera } = useThree()
   const controlsRef = useRef<OrbitControlsImpl>(null)
   const lastUpdateTime = useRef<number>(0)
-  const updateInterval = 50 // milliseconds between camera position updates
+  const updateInterval = isMobile ? 100 : 50 // Longer interval on mobile for better performance
   const initialCameraPosition = useRef(new Vector3(0, 0, 8))
   
   // Store initial camera position
@@ -1063,10 +1116,12 @@ function SceneController({ expanded, cardSelected }: SceneControllerProps) {
         const time = Date.now() * 0.00005; // Slower movement
         
         // Start from initial position and apply very gentle movement
-        camera.position.x = initialCameraPosition.current.x + Math.sin(time) * 2;
-        camera.position.y = initialCameraPosition.current.y + Math.sin(time * 1.3) * 0.5;
+        // Apply reduced camera movement on mobile
+        const movementScale = isMobile ? 0.5 : 1.0;
+        camera.position.x = initialCameraPosition.current.x + Math.sin(time) * 2 * movementScale;
+        camera.position.y = initialCameraPosition.current.y + Math.sin(time * 1.3) * 0.5 * movementScale;
         // Keep z-distance more stable to prevent background issues
-        camera.position.z = initialCameraPosition.current.z + 0.5 * Math.sin(time * 0.7);
+        camera.position.z = initialCameraPosition.current.z + 0.5 * Math.sin(time * 0.7) * movementScale;
         
         camera.lookAt(0, 0, 0);
         lastUpdateTime.current = now;
@@ -1078,14 +1133,20 @@ function SceneController({ expanded, cardSelected }: SceneControllerProps) {
     }
   });
 
+  // Disable controls completely on mobile when expanded for better performance
+  if (isMobile && expanded) {
+    return null;
+  }
+
   return (
     <OrbitControls
       ref={controlsRef}
       enableZoom={false}
       enablePan={false}
-      enableRotate={!expanded && !cardSelected}
+      enableRotate={!expanded && !cardSelected && !isMobile}
       minPolarAngle={Math.PI / 3}
       maxPolarAngle={Math.PI / 1.5}
+      rotateSpeed={isMobile ? 0.5 : 1} // Slower rotation on mobile
     />
   )
 }

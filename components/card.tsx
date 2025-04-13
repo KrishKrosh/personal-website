@@ -797,6 +797,21 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       onPointerOver={handlePointerOver}
       onPointerOut={handlePointerOut}
       onClick={handleClick}
+      onPointerDown={(e) => {
+        // This helps with mobile touch interactions
+        e.stopPropagation();
+        if (expanded) {
+          setIsCardHovered(true);
+        }
+      }}
+      onPointerUp={(e) => {
+        e.stopPropagation();
+        // For mobile devices, a touch is both a pointer down and up event
+        // If we're on mobile, we'll trigger the click handler here explicitly
+        if (expanded) {
+          handleClick();
+        }
+      }}
     >
       {/* Outline effect - only show for expanded cards that are hovered, never for selected cards */}
       {expanded && !isSelected && isCardHovered && outlineIntensity > 0 && (
