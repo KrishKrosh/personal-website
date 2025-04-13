@@ -157,16 +157,12 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
   const [showRealPhoto, setShowRealPhoto] = useState(false)
   // State for transition animation
   const [transitionProgress, setTransitionProgress] = useState(0)
-  // State to track button hover
-  const [buttonHovered, setButtonHovered] = useState(false)
   
   // State for animation
   const [outlineIntensity, setOutlineIntensity] = useState(0)
   const [pulsePhase, setPulsePhase] = useState(Math.random() * Math.PI * 2)
   const [selectionProgress, setSelectionProgress] = useState(0)
   const [opacity, setOpacity] = useState(1)
-  // Button animation state
-  const [buttonAnimProgress, setButtonAnimProgress] = useState(0)
   
   // Save the position and rotation at selection time
   const selectionState = useRef({
@@ -284,19 +280,20 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
             (vUv.y - 0.5) * cardSize.y
           );
           
-          // Only apply rounded corners for the illustrated card (when transition = 0)
-          // As transition progresses, reduce the corner clipping effect
-          if (transitionProgress < 1.0) {
-            // Calculate distance from each corner
-            float topRight = length(max(vec2(0.0), cardPoint - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
-            float topLeft = length(max(vec2(0.0), vec2(-cardPoint.x, cardPoint.y) - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
-            float bottomRight = length(max(vec2(0.0), vec2(cardPoint.x, -cardPoint.y) - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
-            float bottomLeft = length(max(vec2(0.0), -cardPoint - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
-            
-            // If we're in any corner and outside the radius, discard the fragment
-            // but only if we're not transitioning to the real photo
-            if ((topRight > cornerRadius || topLeft > cornerRadius || 
-                bottomRight > cornerRadius || bottomLeft > cornerRadius) && transitionProgress < 0.5) {
+          // Calculate distance from each corner with gradually reducing effect during transition
+          float transitionRadiusEffect = cornerRadius * (1.0 - transitionProgress * 0.8);
+          
+          // Only apply rounded corners with diminishing effect during transition
+          float topRight = length(max(vec2(0.0), cardPoint - vec2(cardSize.x/2.0 - transitionRadiusEffect, cardSize.y/2.0 - transitionRadiusEffect)));
+          float topLeft = length(max(vec2(0.0), vec2(-cardPoint.x, cardPoint.y) - vec2(cardSize.x/2.0 - transitionRadiusEffect, cardSize.y/2.0 - transitionRadiusEffect)));
+          float bottomRight = length(max(vec2(0.0), vec2(cardPoint.x, -cardPoint.y) - vec2(cardSize.x/2.0 - transitionRadiusEffect, cardSize.y/2.0 - transitionRadiusEffect)));
+          float bottomLeft = length(max(vec2(0.0), -cardPoint - vec2(cardSize.x/2.0 - transitionRadiusEffect, cardSize.y/2.0 - transitionRadiusEffect)));
+          
+          // Gradually reduce corner clipping during transition
+          if (topRight > transitionRadiusEffect || topLeft > transitionRadiusEffect || 
+              bottomRight > transitionRadiusEffect || bottomLeft > transitionRadiusEffect) {
+            // For a smooth transition, we use discard less aggressively as the transition progresses
+            if (transitionProgress < 0.3) {
               discard;
             }
           }
@@ -578,16 +575,9 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
 
     // Handle transition animation
     if (showRealPhoto && transitionProgress < 1) {
-      setTransitionProgress(prev => Math.min(prev + 0.02 * frameFactor, 1));
+      setTransitionProgress(prev => Math.min(prev + 0.015 * frameFactor, 1));
     } else if (!showRealPhoto && transitionProgress > 0) {
-      setTransitionProgress(prev => Math.max(prev - 0.02 * frameFactor, 0));
-    }
-    
-    // Update button hover animation
-    if (buttonHovered && buttonAnimProgress < 1) {
-      setButtonAnimProgress(prev => Math.min(prev + 0.1 * frameFactor, 1));
-    } else if (!buttonHovered && buttonAnimProgress > 0) {
-      setButtonAnimProgress(prev => Math.max(prev - 0.1 * frameFactor, 0));
+      setTransitionProgress(prev => Math.max(prev - 0.015 * frameFactor, 0));
     }
     
     // Update shader uniform if material exists
@@ -758,7 +748,13 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
   }
   
   const handleClick = () => {
-    // Allow clicks in expanded mode and toggle selection
+    // If the card is already selected, toggle between illustrated and real versions
+    if (isSelected && hasRealPhoto) {
+      setShowRealPhoto(prev => !prev);
+      return;
+    }
+    
+    // Otherwise handle selection/deselection as before
     if ((expanded && isCardHovered) || isSelected) {
       if (onSelect) {
         onSelect(card.id)
@@ -766,11 +762,32 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     }
   }
 
-  // Toggle between illustrated and real photo versions
-  const toggleRealPhoto = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent triggering card selection
-    setShowRealPhoto(prev => !prev);
-  }
+  // Add event listener for clicks outside card to go back to exploded view
+  useEffect(() => {
+    // Only add listener when a card is selected
+    if (!isSelected) return;
+    
+    const handleGlobalClick = (e: MouseEvent) => {
+      // Check if the click is captured by the card or its children
+      // If not, deselect the card
+      const cardElement = meshRef.current;
+      if (cardElement && onSelect) {
+        // If we detect a click and no objects were hit, it's a background click
+        // We can use a short timeout to check if any other handler cancelled the event
+        setTimeout(() => {
+          if (document.body.style.cursor !== 'pointer') {
+            onSelect(card.id); // This will toggle selection off
+          }
+        }, 10);
+      }
+    };
+    
+    window.addEventListener('click', handleGlobalClick);
+    
+    return () => {
+      window.removeEventListener('click', handleGlobalClick);
+    };
+  }, [isSelected, onSelect, card.id]);
 
   return (
     <group 
@@ -810,9 +827,9 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
           // Use a standard plane with our custom shader material
           <mesh>
             <planeGeometry args={[
-              // Expand the size when showing real photo to account for different aspect ratio
-              showRealPhoto && transitionProgress > 0.5 ? width * 1.2 : width - 0.01, 
-              showRealPhoto && transitionProgress > 0.5 ? height * 1.2 : height - 0.01
+              // Smoothly interpolate size throughout the entire transition
+              width - 0.01 + (transitionProgress * (width * 0.2)), 
+              height - 0.01 + (transitionProgress * (height * 0.2))
             ]} />
             <primitive object={cardFaceMaterial} attach="material" />
           </mesh>
@@ -903,37 +920,24 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
         </Text>
       </group>
 
-      {/* Toggle button for real/illustrated - only shown when card is selected */}
+      {/* Replace the toggle button with an instructional label */}
       {isSelected && hasRealPhoto && (
         <group 
           position={[0, -1.05, 0.1]} 
           scale={0.3}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            setButtonHovered(true);
-            document.body.style.cursor = 'pointer';
-          }}
-          onPointerOut={(e) => {
-            e.stopPropagation();
-            setButtonHovered(false);
-            document.body.style.cursor = 'auto';
-          }}
-          onClick={toggleRealPhoto}
         >
-          {/* Button text */}
           <Text
             position={[0, 0, 0.01]}
-            fontSize={0.18}
+            fontSize={0.14}
             color="#ffffff"
             anchorX="center"
             anchorY="middle"
             font={undefined}
             material-transparent={true}
-            material-opacity={0.6 + (buttonAnimProgress * 0.4)}
+            material-opacity={0.7}
           >
-            {showRealPhoto ? "view illustration" : "view original"}
+            {showRealPhoto ? "click card for illustration" : "click card for original"}
           </Text>
-          
         </group>
       )}
     </group>
