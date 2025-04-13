@@ -321,6 +321,45 @@ export default function CardDeckScene() {
   // Get mystical text and interaction permission
   const { mysticalTextContent, allowInteraction, fadeOutAndHide, showOnlyPickCardLine } = MysticalText()
 
+  // Map to store custom text for different cards
+  // This is a central place to define all card-specific stories
+  const cardStoryMap: Record<string, string> = {
+    // Jack cards (customize these messages as desired)
+    "10-0": "the time I first pet a robot dog myself", // Jack of Spades
+    "10-1": "the time I built my first computer when I was 14", // Jack of Hearts
+    "10-2": "the time I played my first game of chess", // Jack of Diamonds
+    "10-3": "the time I went to my first speedcubing competition", // Jack of Clubs
+    
+    // Queen cards (customize these messages as desired)
+    "11-0": "the months I worked on InternetActivism", // Queen of Spades
+    "11-1": "my very first non-sunday Socratica event", // Queen of Hearts
+    "11-2": "the many hours I spent inside my Quest and Vision Pro", // Queen of Diamonds
+    "11-3": "when I snowboarded in the Swiss Alps (and got a concussion)", // Queen of Clubs
+    
+    // King cards (customize these messages as desired)
+    "12-0": "the time I built a hair cutting robot", // King of Spades
+    "12-1": "the time I made a record-breaking card launcher", // King of Hearts
+    "12-2": "the time I took meetings with electrodes stuck to my head", // King of Diamonds
+    "12-3": "the time I hosted the biggest robot hackathon in history" // King of Clubs
+  };
+  
+  // Helper function to get card story text based on cardId
+  const getCardStoryText = (cardId: number): string => {
+    const cardValue = cardId % 13;
+    const suitValue = Math.floor(cardId / 13);
+    const cardKey = `${cardValue}-${suitValue}`;
+    
+    // Check if we have custom text for this card
+    const isJQK = cardValue >= 10 && cardValue <= 12; // J, Q, K are 10, 11, 12
+    const customText = cardStoryMap[cardKey] || "";
+    
+    if (isJQK) {
+      return `It reminds me of ${customText}. Weirdly I picked the card up in ${userLocation}.`;
+    } else {
+      return `It reminds me of you. It came all the way from ${userLocation}.`;
+    }
+  };
+
   // Function to get user's location non-invasively using ipwhois.io
   const getUserLocation = async (): Promise<string> => {
     try {
@@ -492,6 +531,7 @@ export default function CardDeckScene() {
     
     // Define content structure with text and associated progress setter
     const cardName = getCardName(cardId);
+    
     const contentItems = [
       {
         text: cardName,
@@ -504,7 +544,7 @@ export default function CardDeckScene() {
         delay: 1000,
       },
       {
-        text: `It reminds me of you. It came all the way from ${userLocation}.`,
+        text: getCardStoryText(cardId),
         setProgress: setParagraph2Progress,
         delay: 1000,
       },
@@ -948,7 +988,7 @@ export default function CardDeckScene() {
                 {renderAnimatedText(`Ah yes. The ${getCardName(selectedCardId)}. Beautiful isn't it?`, paragraph1Progress)}
               </p>
               <p>
-                {renderAnimatedText(`It reminds me of you. It came all the way from ${userLocation}.`, paragraph2Progress)}
+                {renderAnimatedText(getCardStoryText(selectedCardId), paragraph2Progress)}
               </p>
               <p>
                 {renderAnimatedText(`Me? Well I spend most of my time tinkering with technology.`, paragraph3Progress)}
