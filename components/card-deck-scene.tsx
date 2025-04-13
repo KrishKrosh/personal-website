@@ -1085,26 +1085,28 @@ function SceneController({ expanded, cardSelected, isMobile }: SceneControllerPr
   const controlsRef = useRef<OrbitControlsImpl>(null)
   const lastUpdateTime = useRef<number>(0)
   const updateInterval = isMobile ? 100 : 50 // Longer interval on mobile for better performance
-  const initialCameraPosition = useRef(new Vector3(0, 0, 8))
+  // Adjust initial Z based on mobile
+  const initialCameraPosition = useRef(new Vector3(0, 0, isMobile ? 12 : 8))
   
-  // Store initial camera position
+  // Store initial camera position (if needed, though ref default handles it)
   useEffect(() => {
-    if (camera) {
-      initialCameraPosition.current.copy(camera.position)
+    if (camera && !initialCameraPosition.current.equals(camera.position)) {
+      // This might be redundant now with the ref initialization, 
+      // but safer to ensure camera matches the intended initial state.
+      camera.position.copy(initialCameraPosition.current) 
     }
-  }, [camera])
+  }, [camera, isMobile]) // Add isMobile dependency
 
-  // When a card is selected, ensure camera is reset to a fixed position
+  // When a card is selected, ensure camera is reset to the correct initial position
   useEffect(() => {
     if (cardSelected && camera) {
-      // Fix camera to a specific position directly in front
-      camera.position.set(0, 0, 8);
+      // Use the calculated initial position (respects mobile Z distance)
+      camera.position.copy(initialCameraPosition.current);
       camera.lookAt(0, 0, 0);
       
-      // Store this known good position
-      initialCameraPosition.current.copy(camera.position);
+      // No need to copy back to initialCameraPosition.current here
     }
-  }, [cardSelected, camera]);
+  }, [cardSelected, camera]); // Removed initialCameraPosition from deps as it's a ref
 
   // Ensure camera doesn't move when a card is selected
   useFrame(() => {
@@ -1118,20 +1120,21 @@ function SceneController({ expanded, cardSelected, isMobile }: SceneControllerPr
         // Start from initial position and apply very gentle movement
         // Apply reduced camera movement on mobile
         const movementScale = isMobile ? 0.5 : 1.0;
+        // Use the initial position components directly (which now account for mobile Z)
         camera.position.x = initialCameraPosition.current.x + Math.sin(time) * 2 * movementScale;
         camera.position.y = initialCameraPosition.current.y + Math.sin(time * 1.3) * 0.5 * movementScale;
-        // Keep z-distance more stable to prevent background issues
+        // Keep z-distance more stable based on the initial Z
         camera.position.z = initialCameraPosition.current.z + 0.5 * Math.sin(time * 0.7) * movementScale;
         
         camera.lookAt(0, 0, 0);
         lastUpdateTime.current = now;
       }
     } else if (cardSelected) {
-      // Force camera to stay in fixed position when card is selected
-      camera.position.set(0, 0, 8);
+      // Force camera to stay in the calculated initial position when card is selected
+      camera.position.copy(initialCameraPosition.current);
       camera.lookAt(0, 0, 0);
     }
-  });
+  }); // Removed initialCameraPosition from deps
 
   // Disable controls completely on mobile when expanded for better performance
   if (isMobile && expanded) {
