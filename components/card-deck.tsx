@@ -26,8 +26,12 @@ interface CardData {
 
 export default function CardDeck({ hovered, expanded, onSelectionChange }: CardDeckProps) {
   const groupRef = useRef<Group>(null)
-  // Reduce the number of cards to improve performance
-  const numCards = 26 // Half a standard deck for better performance
+  
+  // Define specific cards to include (aces, kings, queens, jacks, eights, and threes)
+  const specificCardValues = [0, 2, 7, 10, 11, 12]; // Indices for A, 3, 8, J, Q, K in the values array
+  
+  // Calculate the total number of cards (6 values × 4 suits = 24 cards)
+  const numCards = specificCardValues.length * 4; // 24 cards total
   
   // State for selected card
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null)
@@ -57,35 +61,47 @@ export default function CardDeck({ hovered, expanded, onSelectionChange }: CardD
     return () => window.removeEventListener('resize', updatePanelPosition);
   }, []);
   
-  // Create card data with initial positions
+  // Create card data with specific cards
   const cards = useMemo<CardData[]>(() => {
-    return Array.from({ length: numCards }, (_, i) => ({
-      id: i,
-      // Initial position is stacked with slight offset
-      initialPosition: new Vector3(
-        MathUtils.randFloatSpread(0.1),
-        i * 0.01 - numCards * 0.005,
-        MathUtils.randFloatSpread(0.1),
-      ),
-      // Random rotation for when expanded
-      rotation: [Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2],
-      // Larger and more consistent radius for the globe formation to prevent intersections
-      radius: 4 + Math.random() * 1.5,
-      // Random speed for rotation - reduced for better performance
-      speed: 0.1 + Math.random() * 0.2,
-      // Random phase for varied movement
-      phase: Math.random() * Math.PI * 2,
-      // Random axis for rotation
-      axis: new Vector3(
-        MathUtils.randFloatSpread(2),
-        MathUtils.randFloatSpread(2),
-        MathUtils.randFloatSpread(2),
-      ).normalize(),
-      // More consistent scale to prevent size-based intersections
-      scale: 0.8 + Math.random() * 0.3,
-    }))
-  }, [numCards])
-
+    const cardData: CardData[] = [];
+    
+    // Generate cards for each suit and specific value
+    for (let suitIndex = 0; suitIndex < 4; suitIndex++) {
+      for (let valueIdx = 0; valueIdx < specificCardValues.length; valueIdx++) {
+        // Calculate the actual card ID that would correspond to this suit and value
+        const cardId = suitIndex * 13 + specificCardValues[valueIdx];
+        
+        cardData.push({
+          id: cardId,
+          // Initial position is stacked with slight offset
+          initialPosition: new Vector3(
+            MathUtils.randFloatSpread(0.1),
+            cardData.length * 0.01 - numCards * 0.005,
+            MathUtils.randFloatSpread(0.1),
+          ),
+          // Random rotation for when expanded
+          rotation: [Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2],
+          // Radius for the globe formation
+          radius: 4 + Math.random() * 1.5,
+          // Random speed for rotation - reduced for better performance
+          speed: 0.1 + Math.random() * 0.2,
+          // Random phase for varied movement
+          phase: Math.random() * Math.PI * 2,
+          // Random axis for rotation
+          axis: new Vector3(
+            MathUtils.randFloatSpread(2),
+            MathUtils.randFloatSpread(2),
+            MathUtils.randFloatSpread(2),
+          ).normalize(),
+          // Scale
+          scale: 0.8 + Math.random() * 0.3,
+        });
+      }
+    }
+    
+    return cardData;
+  }, [numCards]);
+  
   // Handler for when a card is selected
   const handleCardSelect = (cardId: number) => {
     const newSelectedId = cardId === selectedCardId ? null : cardId;

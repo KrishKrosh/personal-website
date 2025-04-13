@@ -82,17 +82,32 @@ const getCardImagePath = (value: string, suit: string): string => {
 }
 
 // Function to check if a specific card image exists
-// This is intentionally limited to only the cards we know exist
+// This matches the actual images available in the public/cards directory
 const doesCardImageExist = (value: string, suit: string): boolean => {
-  // We only have these specific cards available
+  // Include all face cards (Jack, Queen, King) for all suits
+  // These match the actual files in the public/cards directory
   const availableCards = [
+    // Hearts
     "j_hearts",
     "q_hearts",
-    "k_hearts", 
-    "k_spades"
+    "k_hearts",
+    // Spades
+    "j_spades",
+    "q_spades",
+    "k_spades",
+    // Diamonds
+    "j_diamonds",
+    "q_diamonds",
+    "k_diamonds",
+    // Clubs
+    "j_clubs",
+    "q_clubs",
+    "k_clubs"
+    // Note: No ace images were found
   ];
   
   const valueMap: { [key: string]: string } = {
+    // "A": "a", // No ace images found
     "J": "j",
     "Q": "q",
     "K": "k"
