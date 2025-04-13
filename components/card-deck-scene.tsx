@@ -411,13 +411,14 @@ export default function CardDeckScene() {
   const animateText = (text: string, setProgress: (progress: number) => void, onComplete?: () => void) => {
     let charIndex = 0;
     let isComplete = false;
+    let isCancelled = false;
     let animationTimer: NodeJS.Timeout | null = null;
     
     // Reset progress at the start
     setProgress(0);
     
     const animate = () => {
-      if (isComplete) return;
+      if (isComplete || isCancelled) return;
       
       if (charIndex >= text.length) {
         isComplete = true;
@@ -425,9 +426,11 @@ export default function CardDeckScene() {
         setProgress(1);
         
         // Delay before calling onComplete to ensure visual separation between sections
-        if (onComplete) {
+        if (onComplete && !isCancelled) {
           animationTimer = setTimeout(() => {
-            onComplete();
+            if (!isCancelled) {
+              onComplete();
+            }
           }, 800); // Longer delay for better separation
         }
         return;
@@ -456,31 +459,32 @@ export default function CardDeckScene() {
       }
       
       // Schedule next character animation
-      animationTimer = setTimeout(animate, nextCharDelay);
+      if (!isCancelled) {
+        animationTimer = setTimeout(animate, nextCharDelay);
+      }
     };
     
     // Start the animation
     animate();
     
-    // Return a function to cancel animation if needed
+    // Return cancellation function
     return () => {
+      isCancelled = true;
       if (animationTimer) {
         clearTimeout(animationTimer);
+        animationTimer = null;
       }
       isComplete = true;
+      
+      // Reset progress to ensure clean state when cancelled
+      setProgress(0);
     };
   };
 
   // Function to animate card text with better sequencing
   const animateCardText = (cardId: number) => {
-    // Reset all progress values first
-    setTitleProgress(0);
-    setParagraph1Progress(0);
-    setParagraph2Progress(0);
-    setParagraph3Progress(0);
-    setParagraph4Progress(0);
-    setParagraph5Progress(0);
-    setLinkProgress(0);
+    // Reset all progress values to ensure a clean state
+    resetAllAnimationProgress();
     
     // Store active animation cancellation functions and timeouts
     const cancelFunctions: (() => void)[] = [];
@@ -526,9 +530,12 @@ export default function CardDeckScene() {
       },
     ];
     
+    // Flag to track if this animation sequence has been cancelled
+    let isCancelled = false;
+    
     // Function to animate items in sequence
     const animateSequence = (index = 0) => {
-      if (index >= contentItems.length) return;
+      if (isCancelled || index >= contentItems.length) return;
       
       const item = contentItems[index];
       
@@ -538,7 +545,7 @@ export default function CardDeckScene() {
         item.setProgress,
         () => {
           // Schedule next item after delay
-          if (index < contentItems.length - 1) {
+          if (!isCancelled && index < contentItems.length - 1) {
             const timeout = setTimeout(() => {
               animateSequence(index + 1);
             }, item.delay);
@@ -554,18 +561,26 @@ export default function CardDeckScene() {
     
     // Start animation sequence after initial delay
     const startTimeout = setTimeout(() => {
-      animateSequence();
+      if (!isCancelled) {
+        animateSequence();
+      }
     }, 300);
     
     timeouts.push(startTimeout);
     
     // Return function to cancel all animations and clear timeouts
     return () => {
+      // Mark as cancelled to prevent starting new animations
+      isCancelled = true;
+      
       // Cancel all active animations
       cancelFunctions.forEach(cancel => cancel());
       
       // Clear all pending timeouts
       timeouts.forEach(timeout => clearTimeout(timeout));
+      
+      // Reset all progress values immediately to ensure clean state
+      resetAllAnimationProgress();
     };
   };
 
@@ -647,6 +662,18 @@ export default function CardDeckScene() {
   // Reset all progress when card is deselected and cancel any ongoing animations
   const [cancelAnimations, setCancelAnimations] = useState<(() => void) | null>(null);
   
+  // Function to completely reset all animation progress states
+  const resetAllAnimationProgress = () => {
+    // Immediately set all progress values to 0
+    setTitleProgress(0);
+    setParagraph1Progress(0);
+    setParagraph2Progress(0);
+    setParagraph3Progress(0);
+    setParagraph4Progress(0);
+    setParagraph5Progress(0);
+    setLinkProgress(0);
+  };
+  
   useEffect(() => {
     if (cardSelected) {
       // Card was selected, animations will start
@@ -658,18 +685,13 @@ export default function CardDeckScene() {
       }
       
       // Reset all progress
-      setTitleProgress(0);
-      setParagraph1Progress(0);
-      setParagraph2Progress(0);
-      setParagraph3Progress(0);
-      setParagraph4Progress(0);
-      setParagraph5Progress(0);
-      setLinkProgress(0);
+      resetAllAnimationProgress();
     }
   }, [cardSelected, cancelAnimations]);
 
   // Handle card selection state change
   const handleCardSelectionChange = (isSelected: boolean, cardId?: number | null): void => {
+    // Update selection state
     setCardSelected(isSelected)
     setSelectedCardId(cardId ?? null)
     
@@ -678,6 +700,9 @@ export default function CardDeckScene() {
       cancelAnimations();
       setCancelAnimations(null);
     }
+    
+    // Force reset of all animation progress states to ensure clean state
+    resetAllAnimationProgress();
     
     // Hide the mystical text when a card is selected
     if (isSelected && cardId !== null && cardId !== undefined) {
