@@ -59,7 +59,7 @@ const createRoundedRectShape = (width: number, height: number, radius: number) =
 }
 
 // Function to get the card image path based on value and suit
-const getCardImagePath = (value: string, suit: string): string => {
+const getCardImagePath = (value: string, suit: string, isReal: boolean = false): string => {
   // Map to the correct filename format
   const valueMap: { [key: string]: string } = {
     "J": "j",
@@ -78,15 +78,15 @@ const getCardImagePath = (value: string, suit: string): string => {
   const mappedValue = valueMap[value] || value.toLowerCase();
   const mappedSuit = suitMap[suit];
   
-  return `/cards/${mappedValue}_${mappedSuit}.png`;
+  // Use the real photo folder if specified
+  return isReal ? `/cards/real/${mappedValue}_${mappedSuit}.png` : `/cards/${mappedValue}_${mappedSuit}.png`;
 }
 
 // Function to check if a specific card image exists
 // This matches the actual images available in the public/cards directory
-const doesCardImageExist = (value: string, suit: string): boolean => {
-  // Include all face cards (Jack, Queen, King) for all suits
-  // These match the actual files in the public/cards directory
-  const availableCards = [
+const doesCardImageExist = (value: string, suit: string, isReal: boolean = false): boolean => {
+  // List of available cards in the regular folder
+  const availableIllustratedCards = [
     // Hearts
     "j_hearts",
     "q_hearts",
@@ -103,7 +103,24 @@ const doesCardImageExist = (value: string, suit: string): boolean => {
     "j_clubs",
     "q_clubs",
     "k_clubs"
-    // Note: No ace images were found
+  ];
+  
+  // List of available cards in the real photos folder
+  const availableRealCards = [
+    // Hearts
+    "j_hearts",
+    "q_hearts",
+    "k_hearts",
+    // Spades
+    "q_spades", 
+    "k_spades",
+    // Diamonds
+    "j_diamonds",
+    "k_diamonds",
+    // Clubs
+    "j_clubs",
+    "k_clubs",
+    "q_clubs"
   ];
   
   const valueMap: { [key: string]: string } = {
@@ -124,7 +141,8 @@ const doesCardImageExist = (value: string, suit: string): boolean => {
   const mappedSuit = suitMap[suit];
   const cardKey = `${mappedValue}_${mappedSuit}`;
   
-  return availableCards.includes(cardKey);
+  // Check against the appropriate list based on whether we're looking for real or illustrated
+  return isReal ? availableRealCards.includes(cardKey) : availableIllustratedCards.includes(cardKey);
 }
 
 export default function Card({ card, hovered, expanded, isSelected = false, allCardsSelected = false, onSelect }: CardProps) {
@@ -135,11 +153,20 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
   const [isCardHovered, setIsCardHovered] = useState(false)
   const { pointer, viewport, camera } = useThree()
   
+  // State for real/illustrated toggle
+  const [showRealPhoto, setShowRealPhoto] = useState(false)
+  // State for transition animation
+  const [transitionProgress, setTransitionProgress] = useState(0)
+  // State to track button hover
+  const [buttonHovered, setButtonHovered] = useState(false)
+  
   // State for animation
   const [outlineIntensity, setOutlineIntensity] = useState(0)
   const [pulsePhase, setPulsePhase] = useState(Math.random() * Math.PI * 2)
   const [selectionProgress, setSelectionProgress] = useState(0)
   const [opacity, setOpacity] = useState(1)
+  // Button animation state
+  const [buttonAnimProgress, setButtonAnimProgress] = useState(0)
   
   // Save the position and rotation at selection time
   const selectionState = useRef({
@@ -165,6 +192,9 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
   // Check if this card has a custom image available
   const hasCustomImage = useMemo(() => doesCardImageExist(value, suit), [value, suit]);
   
+  // Check if this card has a real photo available
+  const hasRealPhoto = useMemo(() => doesCardImageExist(value, suit, true), [value, suit]);
+  
   // Get card image path - only if we know the image exists
   const cardImagePath = useMemo(() => {
     if (hasCustomImage) {
@@ -173,11 +203,21 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     return "";
   }, [value, suit, hasCustomImage]);
   
+  // Get real photo path - only if we know the image exists
+  const realPhotoPath = useMemo(() => {
+    if (hasRealPhoto) {
+      return getCardImagePath(value, suit, true);
+    }
+    return "";
+  }, [value, suit, hasRealPhoto]);
+  
   // Only load texture if we know the image exists
   const cardTexture = hasCustomImage ? useTexture(cardImagePath) : null;
+  const realPhotoTexture = hasRealPhoto ? useTexture(realPhotoPath) : null;
 
   // Image aspect ratio tracking
   const [imageAspectRatio, setImageAspectRatio] = useState(1);
+  const [realPhotoAspectRatio, setRealPhotoAspectRatio] = useState(1);
 
   // Update image aspect ratio once loaded
   useEffect(() => {
@@ -187,7 +227,22 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       // Basic texture settings for better quality
       cardTexture.anisotropy = 16;
     }
-  }, [cardTexture]);
+    
+    if (realPhotoTexture && realPhotoTexture.image) {
+      setRealPhotoAspectRatio(realPhotoTexture.image.width / realPhotoTexture.image.height);
+      
+      // Basic texture settings for better quality
+      realPhotoTexture.anisotropy = 16;
+    }
+  }, [cardTexture, realPhotoTexture]);
+  
+  // Reset to illustrated version when card is deselected
+  useEffect(() => {
+    if (!isSelected) {
+      setShowRealPhoto(false);
+      setTransitionProgress(0);
+    }
+  }, [isSelected]);
   
   // Create a custom shader material for the card face that will properly display the texture
   // while respecting rounded corners
@@ -197,9 +252,12 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     return new ShaderMaterial({
       uniforms: {
         map: { value: cardTexture },
+        map2: { value: realPhotoTexture }, // Add second texture
+        transitionProgress: { value: transitionProgress }, // Add transition progress
         cardSize: { value: new Vector3(width, height, 0) },
         cornerRadius: { value: cornerRadius },
-        imageAspectRatio: { value: cardTexture.image ? cardTexture.image.width / cardTexture.image.height : 1.0 }
+        imageAspectRatio: { value: cardTexture.image ? cardTexture.image.width / cardTexture.image.height : 1.0 },
+        realPhotoAspectRatio: { value: realPhotoTexture?.image ? realPhotoTexture.image.width / realPhotoTexture.image.height : 1.0 }
       },
       vertexShader: `
         varying vec2 vUv;
@@ -211,9 +269,12 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       `,
       fragmentShader: `
         uniform sampler2D map;
+        uniform sampler2D map2;
+        uniform float transitionProgress;
         uniform vec3 cardSize;
         uniform float cornerRadius;
         uniform float imageAspectRatio;
+        uniform float realPhotoAspectRatio;
         varying vec2 vUv;
         
         void main() {
@@ -223,19 +284,24 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
             (vUv.y - 0.5) * cardSize.y
           );
           
-          // Calculate distance from each corner
-          float topRight = length(max(vec2(0.0), cardPoint - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
-          float topLeft = length(max(vec2(0.0), vec2(-cardPoint.x, cardPoint.y) - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
-          float bottomRight = length(max(vec2(0.0), vec2(cardPoint.x, -cardPoint.y) - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
-          float bottomLeft = length(max(vec2(0.0), -cardPoint - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
-          
-          // If we're in any corner and outside the radius, discard the fragment
-          if (topRight > cornerRadius || topLeft > cornerRadius || 
-              bottomRight > cornerRadius || bottomLeft > cornerRadius) {
-            discard;
+          // Only apply rounded corners for the illustrated card (when transition = 0)
+          // As transition progresses, reduce the corner clipping effect
+          if (transitionProgress < 1.0) {
+            // Calculate distance from each corner
+            float topRight = length(max(vec2(0.0), cardPoint - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+            float topLeft = length(max(vec2(0.0), vec2(-cardPoint.x, cardPoint.y) - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+            float bottomRight = length(max(vec2(0.0), vec2(cardPoint.x, -cardPoint.y) - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+            float bottomLeft = length(max(vec2(0.0), -cardPoint - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+            
+            // If we're in any corner and outside the radius, discard the fragment
+            // but only if we're not transitioning to the real photo
+            if ((topRight > cornerRadius || topLeft > cornerRadius || 
+                bottomRight > cornerRadius || bottomLeft > cornerRadius) && transitionProgress < 0.5) {
+              discard;
+            }
           }
           
-          // Calculate adjusted UVs to maintain aspect ratio while filling the card
+          // Calculate adjusted UVs for the illustrated card
           vec2 adjustedUV = vUv;
           float cardAspectRatio = cardSize.x / cardSize.y;
           
@@ -249,14 +315,47 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
             adjustedUV.y = (vUv.y - 0.5) * scale + 0.5;
           }
           
-          // Sample the texture using the adjusted UVs
-          gl_FragColor = texture2D(map, adjustedUV);
+          // Calculate adjusted UVs for the real photo
+          vec2 adjustedUV2 = vUv;
+          if (realPhotoAspectRatio > cardAspectRatio) {
+            // Real photo is wider than card - scale to match height
+            float scale = cardAspectRatio / realPhotoAspectRatio;
+            adjustedUV2.x = (vUv.x - 0.5) * scale + 0.5;
+          } else {
+            // Real photo is taller than card - scale to match width
+            float scale = realPhotoAspectRatio / cardAspectRatio;
+            adjustedUV2.y = (vUv.y - 0.5) * scale + 0.5;
+          }
+          
+          // Sample both textures
+          vec4 color1 = texture2D(map, adjustedUV);
+          vec4 color2 = texture2D(map2, adjustedUV2);
+          
+          // Apply magical pixel dissolve transition effect
+          float noise = fract(sin(dot(vUv, vec2(12.9898, 78.233))) * 43758.5453);
+          float threshold = transitionProgress;
+          float mixFactor = noise < threshold ? 1.0 : 0.0;
+          
+          // Blend between the two textures based on transition progress
+          gl_FragColor = mix(color1, color2, mixFactor);
+          
+          // Add a glow/sparkle effect during transition
+          if (transitionProgress > 0.0 && transitionProgress < 1.0) {
+            float glowIntensity = sin(transitionProgress * 3.14159) * 0.2;
+            float distFromThreshold = abs(noise - threshold);
+            
+            if (distFromThreshold < 0.05) {
+              // Add sparkle along the transition edge
+              float sparkle = glowIntensity * (1.0 - distFromThreshold / 0.05);
+              gl_FragColor.rgb += vec3(sparkle, sparkle, sparkle);
+            }
+          }
         }
       `,
       transparent: true,
       side: DoubleSide
     });
-  }, [cardTexture, width, height, cornerRadius]);
+  }, [cardTexture, realPhotoTexture, transitionProgress, width, height, cornerRadius]);
 
   // Create card geometry
   const cardGeometry = useMemo(() => {
@@ -477,6 +576,25 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       y: prev.y + (targetTilt.y - prev.y) * tiltLerpFactor
     }));
 
+    // Handle transition animation
+    if (showRealPhoto && transitionProgress < 1) {
+      setTransitionProgress(prev => Math.min(prev + 0.02 * frameFactor, 1));
+    } else if (!showRealPhoto && transitionProgress > 0) {
+      setTransitionProgress(prev => Math.max(prev - 0.02 * frameFactor, 0));
+    }
+    
+    // Update button hover animation
+    if (buttonHovered && buttonAnimProgress < 1) {
+      setButtonAnimProgress(prev => Math.min(prev + 0.1 * frameFactor, 1));
+    } else if (!buttonHovered && buttonAnimProgress > 0) {
+      setButtonAnimProgress(prev => Math.max(prev - 0.1 * frameFactor, 0));
+    }
+    
+    // Update shader uniform if material exists
+    if (cardFaceMaterial && 'uniforms' in cardFaceMaterial) {
+      cardFaceMaterial.uniforms.transitionProgress.value = transitionProgress;
+    }
+
     if (isSelected) {
       // Position the selected card differently based on screen size
       // Use the calculateExpandedPosition function to ensure consistency
@@ -648,6 +766,12 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     }
   }
 
+  // Toggle between illustrated and real photo versions
+  const toggleRealPhoto = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering card selection
+    setShowRealPhoto(prev => !prev);
+  }
+
   return (
     <group 
       ref={meshRef}
@@ -682,10 +806,14 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       {/* Card face content - either textured image or standard text */}
       <group position={[0, 0, thickness + 0.001]} renderOrder={2}>
         {/* Use the custom texture for the card face if available */}
-        {hasCustomImage && cardTexture && cardFaceMaterial ? (
+        {(hasCustomImage && cardTexture && cardFaceMaterial) ? (
           // Use a standard plane with our custom shader material
           <mesh>
-            <planeGeometry args={[width - 0.01, height - 0.01]} />
+            <planeGeometry args={[
+              // Expand the size when showing real photo to account for different aspect ratio
+              showRealPhoto && transitionProgress > 0.5 ? width * 1.2 : width - 0.01, 
+              showRealPhoto && transitionProgress > 0.5 ? height * 1.2 : height - 0.01
+            ]} />
             <primitive object={cardFaceMaterial} attach="material" />
           </mesh>
         ) : (
@@ -774,6 +902,40 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
           ♣
         </Text>
       </group>
+
+      {/* Toggle button for real/illustrated - only shown when card is selected */}
+      {isSelected && hasRealPhoto && (
+        <group 
+          position={[0, -1.05, 0.1]} 
+          scale={0.3}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setButtonHovered(true);
+            document.body.style.cursor = 'pointer';
+          }}
+          onPointerOut={(e) => {
+            e.stopPropagation();
+            setButtonHovered(false);
+            document.body.style.cursor = 'auto';
+          }}
+          onClick={toggleRealPhoto}
+        >
+          {/* Button text */}
+          <Text
+            position={[0, 0, 0.01]}
+            fontSize={0.18}
+            color="#ffffff"
+            anchorX="center"
+            anchorY="middle"
+            font={undefined}
+            material-transparent={true}
+            material-opacity={0.6 + (buttonAnimProgress * 0.4)}
+          >
+            {showRealPhoto ? "view illustration" : "view original"}
+          </Text>
+          
+        </group>
+      )}
     </group>
   )
 }
