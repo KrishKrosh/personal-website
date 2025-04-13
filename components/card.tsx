@@ -442,7 +442,7 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     const y = (pointer.y * viewport.height) / 2;
     
     // Check if the cursor is over the card using raycasting
-    const isPointerOverCard = document.body.style.cursor === 'pointer';
+    const isPointerOverCard = document.body.classList.contains('clickable');
     
     if (!isPointerOverCard) {
       // When cursor is not over the card, set target tilt to zero (flat)
@@ -735,16 +735,18 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     // Only enable hover effects if the card is in expanded state but not selected
     if (expanded && !isSelected) {
       setIsCardHovered(true)
-      document.body.style.cursor = 'pointer'
+      // Use a CSS class instead of directly setting the cursor style
+      document.body.classList.add('clickable')
     } else if (isSelected) {
       // Still change cursor for selected card, but don't activate hover effects
-      document.body.style.cursor = 'pointer'
+      document.body.classList.add('clickable')
     }
   }
   
   const handlePointerOut = () => {
     setIsCardHovered(false)
-    document.body.style.cursor = 'auto'
+    // Remove the CSS class when not hovering
+    document.body.classList.remove('clickable')
   }
   
   const handleClick = () => {
@@ -772,10 +774,10 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       // If not, deselect the card
       const cardElement = meshRef.current;
       if (cardElement && onSelect) {
-        // If we detect a click and no objects were hit, it's a background click
+        // If we detect a click and the cursor is not in pointer state, it's a background click
         // We can use a short timeout to check if any other handler cancelled the event
         setTimeout(() => {
-          if (document.body.style.cursor !== 'pointer') {
+          if (!document.body.classList.contains('clickable')) {
             onSelect(card.id); // This will toggle selection off
           }
         }, 10);

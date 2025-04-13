@@ -760,7 +760,7 @@ export default function CardDeckScene() {
   return (
     <div 
       ref={containerRef}
-      className="h-screen w-full cursor-pointer relative" 
+      className="h-screen w-full relative" 
       onPointerMove={handlePointerMove}
     >
       <style jsx global>{`
@@ -882,6 +882,7 @@ export default function CardDeckScene() {
           font-size: 1.2rem;
           transition: color 0.3s ease;
           pointer-events: auto;
+          cursor: pointer; /* Add cursor pointer only to links */
         }
         
         .card-info-panel a:hover {
@@ -916,6 +917,11 @@ export default function CardDeckScene() {
           .card-info-panel p {
             font-size: 1rem;
           }
+        }
+        
+        /* Add clickable class for elements that should have pointer cursor */
+        .clickable {
+          cursor: pointer;
         }
       `}</style>
       
@@ -997,7 +1003,12 @@ export default function CardDeckScene() {
               <p>
                 {renderAnimatedText(`More? Well I guess I could share a couple of my notes with you.`, paragraph5Progress)}
               </p>
-              <a href="https://notes.krishkrosh.com" target="_blank" rel="noopener noreferrer">
+              <a 
+                href="https://notes.krishkrosh.com" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="clickable"
+              >
                 {renderAnimatedText(`Visit notes.krishkrosh.com`, linkProgress)}
               </a>
             </div>
