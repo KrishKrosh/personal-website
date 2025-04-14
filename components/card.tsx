@@ -4,7 +4,7 @@ import { useRef, useState, useMemo, useEffect } from "react"
 import { useFrame, useThree } from "@react-three/fiber"
 import { MeshStandardMaterial, DoubleSide, Vector3, Group, Shape, ExtrudeGeometry, 
          MeshBasicMaterial, Euler, Quaternion, Matrix4, TextureLoader, ShaderMaterial,
-         PlaneGeometry } from "three"
+         PlaneGeometry, RingGeometry } from "three"
 import { Text, useTexture } from "@react-three/drei"
 
 // Card suits and values
@@ -211,10 +211,115 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
   // Only load texture if we know the image exists
   const cardTexture = hasCustomImage ? useTexture(cardImagePath) : null;
   const realPhotoTexture = hasRealPhoto ? useTexture(realPhotoPath) : null;
+  
+  // Card back texture with error handling
+  const [cardBackTextureError, setCardBackTextureError] = useState(false);
+  const cardBackTexture = useMemo(() => {
+    try {
+      // Create a texture loader with error handling
+      const loader = new TextureLoader();
+      const texture = loader.load(
+        "/images/card-back.png",
+        undefined, // onLoad callback
+        undefined, // onProgress callback
+        () => {
+          console.warn("Card back texture not found, using fallback");
+          setCardBackTextureError(true);
+        }
+      );
+      return texture;
+    } catch (error) {
+      console.warn("Error loading card back texture:", error);
+      setCardBackTextureError(true);
+      return null;
+    }
+  }, []);
+
+  // Card back material with rounded corners using shader
+  const cardBackMaterial = useMemo(() => {
+    if (!cardBackTexture) return null;
+    
+    return new ShaderMaterial({
+      uniforms: {
+        map: { value: cardBackTexture },
+        cardSize: { value: new Vector3(width, height, 0) },
+        cornerRadius: { value: cornerRadius },
+        textureAspectRatio: { value: 1.0 } // Default to 1:1 aspect ratio
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D map;
+        uniform vec3 cardSize;
+        uniform float cornerRadius;
+        uniform float textureAspectRatio;
+        varying vec2 vUv;
+        
+        void main() {
+          // Convert UV from 0-1 range to actual card dimensions
+          vec2 cardPoint = vec2(
+            (vUv.x - 0.5) * cardSize.x,
+            (vUv.y - 0.5) * cardSize.y
+          );
+          
+          // Calculate distances from corners
+          float topRight = length(max(vec2(0.0), cardPoint - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+          float topLeft = length(max(vec2(0.0), vec2(-cardPoint.x, cardPoint.y) - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+          float bottomRight = length(max(vec2(0.0), vec2(cardPoint.x, -cardPoint.y) - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+          float bottomLeft = length(max(vec2(0.0), -cardPoint - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+          
+          // Apply corner clipping
+          if (topRight > cornerRadius || topLeft > cornerRadius || 
+              bottomRight > cornerRadius || bottomLeft > cornerRadius) {
+            discard;
+          }
+          
+          // Calculate adjusted UVs for proper texture scaling
+          vec2 adjustedUV = vUv;
+          float cardAspectRatio = cardSize.x / cardSize.y;
+          
+          if (textureAspectRatio > cardAspectRatio) {
+            // Image is wider than card - scale to match height
+            float scale = cardAspectRatio / textureAspectRatio;
+            adjustedUV.x = (vUv.x - 0.5) * scale + 0.5;
+          } else {
+            // Image is taller than card - scale to match width
+            float scale = textureAspectRatio / cardAspectRatio;
+            adjustedUV.y = (vUv.y - 0.5) * scale + 0.5;
+          }
+          
+          // Sample texture with adjusted UVs
+          vec4 color = texture2D(map, adjustedUV);
+          
+          // Apply gold metallic tint
+          color.rgb = mix(color.rgb, vec3(1.0, 0.84, 0.0), 0.15);
+          
+          // Simulate metallic sheen at edges
+          float edgeFactor = 1.0 - min(
+            min(distance(vUv.x, 0.0), distance(vUv.x, 1.0)),
+            min(distance(vUv.y, 0.0), distance(vUv.y, 1.0))
+          ) * 5.0;
+          
+          color.rgb += vec3(edgeFactor * 0.1);
+          
+          gl_FragColor = color;
+        }
+      `,
+      transparent: true,
+      side: DoubleSide
+    });
+  }, [cardBackTexture, width, height, cornerRadius]);
 
   // Image aspect ratio tracking
   const [imageAspectRatio, setImageAspectRatio] = useState(1);
   const [realPhotoAspectRatio, setRealPhotoAspectRatio] = useState(1);
+  const [cardBackAspectRatio, setCardBackAspectRatio] = useState(1);
 
   // Update image aspect ratio once loaded
   useEffect(() => {
@@ -231,7 +336,21 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       // Basic texture settings for better quality
       realPhotoTexture.anisotropy = 16;
     }
-  }, [cardTexture, realPhotoTexture]);
+    
+    if (cardBackTexture && cardBackTexture.image) {
+      setCardBackAspectRatio(cardBackTexture.image.width / cardBackTexture.image.height);
+      
+      // Basic texture settings for better quality
+      cardBackTexture.anisotropy = 16;
+    }
+  }, [cardTexture, realPhotoTexture, cardBackTexture]);
+  
+  // Update card back shader uniform when aspect ratio changes
+  useEffect(() => {
+    if (cardBackMaterial && 'uniforms' in cardBackMaterial) {
+      cardBackMaterial.uniforms.textureAspectRatio.value = cardBackAspectRatio;
+    }
+  }, [cardBackMaterial, cardBackAspectRatio]);
   
   // Reset to illustrated version when card is deselected
   useEffect(() => {
@@ -933,145 +1052,33 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
 
       {/* Card back design - intricate */}
       <group position={[0, 0, -thickness / 2 - 0.001]} rotation={[Math.PI, 0, 0]} renderOrder={1}>
-        {/* Base layer with gradient */}
+        {/* Card back with shader-based rounded corners */}
         <mesh>
-          <planeGeometry args={[width - 0.1, height - 0.1]} />
-          <meshStandardMaterial 
-            color="#ffd700" 
-            metalness={0.8} 
-            roughness={0.1} 
-            side={DoubleSide}
-          />
-        </mesh>
-
-        {/* Border pattern */}
-        <mesh position={[0, 0, 0.001]}>
-          <planeGeometry args={[width - 0.18, height - 0.18]} />
-          <meshStandardMaterial 
-            color="#c09000" 
-            metalness={0.9} 
-            roughness={0.2} 
-            side={DoubleSide}
-          />
-        </mesh>
-
-        {/* Inner border */}
-        <mesh position={[0, 0, 0.002]}>
-          <planeGeometry args={[width - 0.26, height - 0.26]} />
-          <meshStandardMaterial 
-            color="#ffd700" 
-            metalness={0.8} 
-            roughness={0.1} 
-            side={DoubleSide}
-          />
-        </mesh>
-
-        {/* Decorative corners */}
-        {[
-          [-width/2 + 0.25, height/2 - 0.25, 0.003],
-          [width/2 - 0.25, height/2 - 0.25, 0.003],
-          [-width/2 + 0.25, -height/2 + 0.25, 0.003],
-          [width/2 - 0.25, -height/2 + 0.25, 0.003]
-        ].map((pos, index) => (
-          <group key={index} position={[pos[0], pos[1], pos[2]]} rotation={[0, 0, index * Math.PI/2]}>
-            <Text
-              fontSize={0.16}
-              color="#c09000"
-              anchorX="center"
-              anchorY="middle"
-            >
-              ♠
-            </Text>
-          </group>
-        ))}
-
-        {/* Central emblem */}
-        <group position={[0, 0, 0.003]}>
-          {/* Circular background */}
-          <mesh>
-            <circleGeometry args={[0.5, 32]} />
+          <planeGeometry args={[width, height]} />
+          {cardBackTexture && !cardBackTextureError && cardBackMaterial ? (
+            <primitive object={cardBackMaterial} attach="material" />
+          ) : (
             <meshStandardMaterial 
-              color="#c09000" 
-              metalness={0.9} 
+              color="#ffd700" 
+              metalness={0.8} 
               roughness={0.2} 
               side={DoubleSide}
             />
-          </mesh>
-          
-          {/* Central emblems - all four suits in a decorative pattern */}
-          <group position={[0, 0.15, 0.001]}>
-            <Text
-              fontSize={0.18}
-              color="#ffd700"
-              anchorX="center"
-              anchorY="middle"
-            >
-              ♠
-            </Text>
-          </group>
-          
-          <group position={[0.15, 0, 0.001]}>
-            <Text
-              fontSize={0.18}
-              color="#ffd700"
-              anchorX="center"
-              anchorY="middle"
-            >
-              ♥
-            </Text>
-          </group>
-          
-          <group position={[0, -0.15, 0.001]}>
-            <Text
-              fontSize={0.18}
-              color="#ffd700"
-              anchorX="center"
-              anchorY="middle"
-            >
-              ♦
-            </Text>
-          </group>
-          
-          <group position={[-0.15, 0, 0.001]}>
-            <Text
-              fontSize={0.18}
-              color="#ffd700"
-              anchorX="center"
-              anchorY="middle"
-            >
-              ♣
-            </Text>
-          </group>
-        </group>
+          )}
+        </mesh>
         
-        {/* Pattern lines */}
-        <group position={[0, 0, 0.0025]}>
-          {Array.from({ length: 10 }).map((_, i) => (
-            <mesh key={`hline-${i}`} position={[0, -height/2 + 0.2 + i * (height - 0.4)/9, 0]}>
-              <planeGeometry args={[width - 0.4, 0.01]} />
-              <meshStandardMaterial 
-                color="#c09000" 
-                metalness={0.9} 
-                transparent={true}
-                opacity={0.5}
-                side={DoubleSide}
-              />
-            </mesh>
-          ))}
-          
-          {Array.from({ length: 10 }).map((_, i) => (
-            <mesh key={`vline-${i}`} position={[-width/2 + 0.2 + i * (width - 0.4)/9, 0, 0]}>
-              <planeGeometry args={[0.01, height - 0.4]} />
-              <meshStandardMaterial 
-                color="#c09000" 
-                metalness={0.9} 
-                transparent={true}
-                opacity={0.5}
-                side={DoubleSide}
-              />
-            </mesh>
-          ))}
-        </group>
+        {/* Gold border - only shown when no texture is available */}
+        {(!cardBackTexture || cardBackTextureError) && (
+          <mesh position={[0, 0, 0.0015]}>
+            <ringGeometry args={[width/2 - 0.15, width/2 - 0.1, 32]} />
+            <meshStandardMaterial 
+              color="#ffd700" 
+              metalness={0.9} 
+              roughness={0.1} 
+              side={DoubleSide}
+            />
+          </mesh>
+        )}
       </group>
 
       {/* Replace the toggle button with an instructional label */}
