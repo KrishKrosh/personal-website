@@ -785,23 +785,32 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
         return;
       }
       
-      // 2. Check if the click target is outside the canvas element
-      if (canvasElement && onSelect) {
-          // Check if the event target is NOT the canvas element or one of its descendants
-          if (!canvasElement.contains(e.target as Node)) {
-              // Click was outside the canvas, so deselect
-              onSelect(card.id); 
-          }
+      // Deselect the card when clicking anywhere except on the card itself
+      if (onSelect) {
+        // Check if this is a click directly on a THREE.js object (the card)
+        // If not, it's a click on empty space and we should deselect
+        const rect = canvasElement.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        
+        // If the pointer is not over any 3D object when clicked (empty space),
+        // or if the click is outside the canvas, deselect the card
+        const isClickOutsideCanvas = !canvasElement.contains(e.target as Node);
+        const isClickOnEmptySpace = !isCardHovered;
+        
+        if (isClickOutsideCanvas || isClickOnEmptySpace) {
+          onSelect(card.id);
+        }
       }
     };
     
-    // Add listener - consider capture phase if needed, but start without it
+    // Add listener
     window.addEventListener('click', handleGlobalClick);
     
     return () => {
       window.removeEventListener('click', handleGlobalClick);
     };
-  }, [isSelected, onSelect, card.id]);
+  }, [isSelected, onSelect, card.id, isCardHovered]);
 
   return (
     <group 
