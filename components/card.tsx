@@ -214,19 +214,29 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
   
   // Card back texture with error handling
   const [cardBackTextureError, setCardBackTextureError] = useState(false);
+  const [cardBackAspectRatio, setCardBackAspectRatio] = useState(1);
   const cardBackTexture = useMemo(() => {
     try {
       // Create a texture loader with error handling
       const loader = new TextureLoader();
       const texture = loader.load(
         "/images/card-back.png",
-        undefined, // onLoad callback
+        (loadedTexture) => {
+          // Update aspect ratio once texture is loaded
+          if (loadedTexture.image) {
+            setCardBackAspectRatio(loadedTexture.image.width / loadedTexture.image.height);
+          }
+        },
         undefined, // onProgress callback
         () => {
           console.warn("Card back texture not found, using fallback");
           setCardBackTextureError(true);
         }
       );
+      
+      // Apply texture settings for better quality
+      texture.anisotropy = 16;
+      
       return texture;
     } catch (error) {
       console.warn("Error loading card back texture:", error);
@@ -234,6 +244,98 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       return null;
     }
   }, []);
+  
+  // Create a custom shader material for the card back that will properly display the texture
+  // while respecting rounded corners - similar to the card face material
+  const cardBackMaterial = useMemo(() => {
+    if (!cardBackTexture || cardBackTextureError) return null;
+    
+    return new ShaderMaterial({
+      uniforms: {
+        map: { value: cardBackTexture },
+        cardSize: { value: new Vector3(width, height, 0) },
+        cornerRadius: { value: cornerRadius },
+        shineColor: { value: new Vector3(1.0, 0.843, 0.0) }, // Gold shine color in RGB
+        shineOpacity: { value: 0.3 },
+        borderWidth: { value: 0.05 },
+        textureAspectRatio: { value: cardBackAspectRatio }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D map;
+        uniform vec3 cardSize;
+        uniform float cornerRadius;
+        uniform vec3 shineColor;
+        uniform float shineOpacity;
+        uniform float borderWidth;
+        uniform float textureAspectRatio;
+        varying vec2 vUv;
+        
+        void main() {
+          // Convert UV from 0-1 range to actual card dimensions
+          vec2 cardPoint = vec2(
+            (vUv.x - 0.5) * cardSize.x,
+            (vUv.y - 0.5) * cardSize.y
+          );
+          
+          // Calculate distance from corners for rounded corner effect
+          float topRight = length(max(vec2(0.0), cardPoint - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+          float topLeft = length(max(vec2(0.0), vec2(-cardPoint.x, cardPoint.y) - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+          float bottomRight = length(max(vec2(0.0), vec2(cardPoint.x, -cardPoint.y) - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+          float bottomLeft = length(max(vec2(0.0), -cardPoint - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
+          
+          // Discard fragments outside the rounded rectangle
+          if (topRight > cornerRadius || topLeft > cornerRadius || 
+              bottomRight > cornerRadius || bottomLeft > cornerRadius) {
+            discard;
+          }
+          
+          // Adjust texture coordinates based on aspect ratio to fill the card without stretching
+          vec2 adjustedUV = vUv;
+          float cardAspectRatio = cardSize.x / cardSize.y;
+          
+          if (textureAspectRatio > cardAspectRatio) {
+            // Image is wider than card - scale to match height
+            float scale = cardAspectRatio / textureAspectRatio;
+            adjustedUV.x = (vUv.x - 0.5) * scale + 0.5;
+          } else {
+            // Image is taller than card - scale to match width
+            float scale = textureAspectRatio / cardAspectRatio;
+            adjustedUV.y = (vUv.y - 0.5) * scale + 0.5;
+          }
+          
+          // Sample the texture with adjusted coordinates
+          vec4 texColor = texture2D(map, adjustedUV);
+          
+          // Calculate border effect
+          float distFromEdgeX = min(vUv.x, 1.0 - vUv.x);
+          float distFromEdgeY = min(vUv.y, 1.0 - vUv.y);
+          float distFromEdge = min(distFromEdgeX, distFromEdgeY);
+          
+          // Create gold shimmer effect near the edges and for the border
+          float borderFactor = smoothstep(0.0, borderWidth, distFromEdge);
+          float shimmerIntensity = (1.0 - borderFactor) * shineOpacity;
+          
+          // Add subtle shine variation based on position
+          float shine = shimmerIntensity * (0.8 + 0.2 * sin(vUv.x * 20.0) * sin(vUv.y * 20.0));
+          
+          // Mix the texture with the gold shine
+          vec3 finalColor = mix(texColor.rgb, shineColor, shine);
+          
+          gl_FragColor = vec4(finalColor, 1.0);
+        }
+      `,
+      transparent: false,
+      side: DoubleSide
+    });
+  }, [cardBackTexture, cardBackTextureError, width, height, cornerRadius, cardBackAspectRatio]);
 
   // Image aspect ratio tracking
   const [imageAspectRatio, setImageAspectRatio] = useState(1);
@@ -255,6 +357,13 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       realPhotoTexture.anisotropy = 16;
     }
   }, [cardTexture, realPhotoTexture]);
+  
+  // Update shader uniforms when aspect ratio changes
+  useEffect(() => {
+    if (cardBackMaterial && 'uniforms' in cardBackMaterial) {
+      cardBackMaterial.uniforms.textureAspectRatio.value = cardBackAspectRatio;
+    }
+  }, [cardBackMaterial, cardBackAspectRatio]);
   
   // Reset to illustrated version when card is deselected
   useEffect(() => {
@@ -956,50 +1065,71 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
 
       {/* Card back design - intricate */}
       <group position={[0, 0, -thickness / 2 - 0.001]} rotation={[Math.PI, 0, 0]} renderOrder={1}>
-        {/* Base layer with card back texture */}
+        {/* Card back with proper texture and rounded corners */}
         <mesh>
-          <planeGeometry args={[width - 0.05, height - 0.05]} />
-          {cardBackTexture && !cardBackTextureError ? (
-            <meshStandardMaterial 
-              color="#ffffff"
-              map={cardBackTexture} 
-              metalness={0.5} 
-              roughness={0.3} 
-              side={DoubleSide}
-            />
+          <planeGeometry args={[width, height]} />
+          {cardBackMaterial ? (
+            <primitive object={cardBackMaterial} attach="material" />
           ) : (
+            // Fallback if texture isn't loaded - create a nice patterned back
             <meshStandardMaterial 
-              color="#ffd700" 
+              color="#c09000" 
               metalness={0.8} 
               roughness={0.2} 
               side={DoubleSide}
             />
           )}
         </mesh>
-
-        {/* Gold shimmer overlay */}
-        <mesh position={[0, 0, 0.001]}>
-          <planeGeometry args={[width - 0.15, height - 0.15]} />
-          <meshStandardMaterial 
-            color="#ffd700" 
-            metalness={0.9} 
-            roughness={0.2} 
-            transparent={true}
-            opacity={0.2}
-            side={DoubleSide}
-          />
-        </mesh>
-
-        {/* Gold border */}
-        <mesh position={[0, 0, 0.0015]}>
-          <ringGeometry args={[width/2 - 0.15, width/2 - 0.1, 32]} />
-          <meshStandardMaterial 
-            color="#ffd700" 
-            metalness={0.9} 
-            roughness={0.1} 
-            side={DoubleSide}
-          />
-        </mesh>
+        
+        {/* Fallback decorative elements when no texture is available */}
+        {!cardBackMaterial && (
+          <>
+            {/* Inner border */}
+            <mesh position={[0, 0, 0.001]}>
+              <planeGeometry args={[width - 0.15, height - 0.15]} />
+              <meshStandardMaterial 
+                color="#ffd700" 
+                metalness={0.9} 
+                roughness={0.1} 
+                side={DoubleSide}
+              />
+            </mesh>
+            
+            {/* Center ornament */}
+            <group position={[0, 0, 0.002]}>
+              <mesh>
+                <circleGeometry args={[0.4, 32]} />
+                <meshStandardMaterial 
+                  color="#c09000" 
+                  metalness={0.8} 
+                  roughness={0.2} 
+                  side={DoubleSide}
+                />
+              </mesh>
+              
+              {/* Suits in the center */}
+              {suits.map((suit, index) => (
+                <group 
+                  key={index}
+                  position={[
+                    Math.cos(index * Math.PI / 2) * 0.2,
+                    Math.sin(index * Math.PI / 2) * 0.2,
+                    0.001
+                  ]}
+                >
+                  <Text
+                    fontSize={0.15}
+                    color="#ffd700"
+                    anchorX="center"
+                    anchorY="middle"
+                  >
+                    {suit}
+                  </Text>
+                </group>
+              ))}
+            </group>
+          </>
+        )}
       </group>
 
       {/* Replace the toggle button with an instructional label */}
