@@ -152,7 +152,7 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
   const [value] = useState(values[card.id % 13])
   const [isRed] = useState(suit === "♥" || suit === "♦")
   const [isCardHovered, setIsCardHovered] = useState(false)
-  const { pointer, viewport, camera } = useThree()
+  const { pointer, viewport, camera, gl } = useThree()
   
   // State for real/illustrated toggle
   const [showRealPhoto, setShowRealPhoto] = useState(false)
@@ -281,22 +281,19 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
             (vUv.y - 0.5) * cardSize.y
           );
           
-          // Calculate distance from each corner with gradually reducing effect during transition
-          float transitionRadiusEffect = cornerRadius * (1.0 - transitionProgress * 0.8);
+          // Use consistent corner radius throughout the transition
+          float cardCornerRadius = cornerRadius;
           
-          // Only apply rounded corners with diminishing effect during transition
-          float topRight = length(max(vec2(0.0), cardPoint - vec2(cardSize.x/2.0 - transitionRadiusEffect, cardSize.y/2.0 - transitionRadiusEffect)));
-          float topLeft = length(max(vec2(0.0), vec2(-cardPoint.x, cardPoint.y) - vec2(cardSize.x/2.0 - transitionRadiusEffect, cardSize.y/2.0 - transitionRadiusEffect)));
-          float bottomRight = length(max(vec2(0.0), vec2(cardPoint.x, -cardPoint.y) - vec2(cardSize.x/2.0 - transitionRadiusEffect, cardSize.y/2.0 - transitionRadiusEffect)));
-          float bottomLeft = length(max(vec2(0.0), -cardPoint - vec2(cardSize.x/2.0 - transitionRadiusEffect, cardSize.y/2.0 - transitionRadiusEffect)));
+          // Only apply rounded corners - removed the diminishing effect during transition
+          float topRight = length(max(vec2(0.0), cardPoint - vec2(cardSize.x/2.0 - cardCornerRadius, cardSize.y/2.0 - cardCornerRadius)));
+          float topLeft = length(max(vec2(0.0), vec2(-cardPoint.x, cardPoint.y) - vec2(cardSize.x/2.0 - cardCornerRadius, cardSize.y/2.0 - cardCornerRadius)));
+          float bottomRight = length(max(vec2(0.0), vec2(cardPoint.x, -cardPoint.y) - vec2(cardSize.x/2.0 - cardCornerRadius, cardSize.y/2.0 - cardCornerRadius)));
+          float bottomLeft = length(max(vec2(0.0), -cardPoint - vec2(cardSize.x/2.0 - cardCornerRadius, cardSize.y/2.0 - cardCornerRadius)));
           
-          // Gradually reduce corner clipping during transition
-          if (topRight > transitionRadiusEffect || topLeft > transitionRadiusEffect || 
-              bottomRight > transitionRadiusEffect || bottomLeft > transitionRadiusEffect) {
-            // For a smooth transition, we use discard less aggressively as the transition progresses
-            if (transitionProgress < 0.3) {
-              discard;
-            }
+          // Apply consistent corner clipping throughout the transition
+          if (topRight > cardCornerRadius || topLeft > cardCornerRadius || 
+              bottomRight > cardCornerRadius || bottomLeft > cardCornerRadius) {
+            discard;
           }
           
           // Calculate adjusted UVs for the illustrated card
@@ -750,7 +747,15 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     document.body.classList.remove('clickable')
   }
   
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent) => {
+    // Add a special flag to the event to identify it as a card click
+    if (e) {
+      e.stopPropagation();
+      // Set a custom property to identify this as a direct card click
+      // @ts-ignore - we're adding a custom property
+      e.cardClick = true;
+    }
+    
     // If the card is already selected, toggle between illustrated and real versions
     if (isSelected && hasRealPhoto) {
       setShowRealPhoto(prev => !prev);
@@ -770,21 +775,27 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     // Only add listener when a card is selected
     if (!isSelected) return;
     
+    // Get the canvas element from the renderer
+    const canvasElement = gl.domElement;
+
     const handleGlobalClick = (e: MouseEvent) => {
-      // Check if the click is captured by the card or its children
-      // If not, deselect the card
-      const cardElement = meshRef.current;
-      if (cardElement && onSelect) {
-        // If we detect a click and the cursor is not in pointer state, it's a background click
-        // We can use a short timeout to check if any other handler cancelled the event
-        setTimeout(() => {
-          if (!document.body.classList.contains('clickable')) {
-            onSelect(card.id); // This will toggle selection off
+      // 1. Ignore clicks that originated directly from the card's onClick handler
+      // @ts-ignore - checking for our custom property
+      if (e.cardClick === true) {
+        return;
+      }
+      
+      // 2. Check if the click target is outside the canvas element
+      if (canvasElement && onSelect) {
+          // Check if the event target is NOT the canvas element or one of its descendants
+          if (!canvasElement.contains(e.target as Node)) {
+              // Click was outside the canvas, so deselect
+              onSelect(card.id); 
           }
-        }, 10);
       }
     };
     
+    // Add listener - consider capture phase if needed, but start without it
     window.addEventListener('click', handleGlobalClick);
     
     return () => {
@@ -809,9 +820,6 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
         e.stopPropagation();
         // We no longer need to call handleClick here,
         // onClick handles both desktop and mobile reliably.
-        // if (expanded) {
-        //   handleClick();
-        // }
       }}
     >
       {/* Outline effect - only show for expanded cards that are hovered, never for selected cards */}
@@ -845,9 +853,9 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
           // Use a standard plane with our custom shader material
           <mesh>
             <planeGeometry args={[
-              // Smoothly interpolate size throughout the entire transition
-              width - 0.01 + (transitionProgress * (width * 0.2)), 
-              height - 0.01 + (transitionProgress * (height * 0.2))
+              // Maintain the original size throughout transition instead of interpolating
+              width - 0.01, 
+              height - 0.01
             ]} />
             <primitive object={cardFaceMaterial} attach="material" />
           </mesh>
