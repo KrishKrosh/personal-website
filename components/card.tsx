@@ -931,8 +931,9 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
         )}
       </group>
 
-      {/* Card back design - simplified */}
+      {/* Card back design - intricate */}
       <group position={[0, 0, -thickness / 2 - 0.001]} rotation={[Math.PI, 0, 0]} renderOrder={1}>
+        {/* Base layer with gradient */}
         <mesh>
           <planeGeometry args={[width - 0.1, height - 0.1]} />
           <meshStandardMaterial 
@@ -943,16 +944,134 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
           />
         </mesh>
 
-        {/* Simple decorative element */}
-        <Text
-          position={[0, 0, 0.002]}
-          fontSize={0.3}
-          color="#ffffff"
-          anchorX="center"
-          anchorY="middle"
-        >
-          ♣
-        </Text>
+        {/* Border pattern */}
+        <mesh position={[0, 0, 0.001]}>
+          <planeGeometry args={[width - 0.18, height - 0.18]} />
+          <meshStandardMaterial 
+            color="#c09000" 
+            metalness={0.9} 
+            roughness={0.2} 
+            side={DoubleSide}
+          />
+        </mesh>
+
+        {/* Inner border */}
+        <mesh position={[0, 0, 0.002]}>
+          <planeGeometry args={[width - 0.26, height - 0.26]} />
+          <meshStandardMaterial 
+            color="#ffd700" 
+            metalness={0.8} 
+            roughness={0.1} 
+            side={DoubleSide}
+          />
+        </mesh>
+
+        {/* Decorative corners */}
+        {[
+          [-width/2 + 0.25, height/2 - 0.25, 0.003],
+          [width/2 - 0.25, height/2 - 0.25, 0.003],
+          [-width/2 + 0.25, -height/2 + 0.25, 0.003],
+          [width/2 - 0.25, -height/2 + 0.25, 0.003]
+        ].map((pos, index) => (
+          <group key={index} position={[pos[0], pos[1], pos[2]]} rotation={[0, 0, index * Math.PI/2]}>
+            <Text
+              fontSize={0.16}
+              color="#c09000"
+              anchorX="center"
+              anchorY="middle"
+            >
+              ♠
+            </Text>
+          </group>
+        ))}
+
+        {/* Central emblem */}
+        <group position={[0, 0, 0.003]}>
+          {/* Circular background */}
+          <mesh>
+            <circleGeometry args={[0.5, 32]} />
+            <meshStandardMaterial 
+              color="#c09000" 
+              metalness={0.9} 
+              roughness={0.2} 
+              side={DoubleSide}
+            />
+          </mesh>
+          
+          {/* Central emblems - all four suits in a decorative pattern */}
+          <group position={[0, 0.15, 0.001]}>
+            <Text
+              fontSize={0.18}
+              color="#ffd700"
+              anchorX="center"
+              anchorY="middle"
+            >
+              ♠
+            </Text>
+          </group>
+          
+          <group position={[0.15, 0, 0.001]}>
+            <Text
+              fontSize={0.18}
+              color="#ffd700"
+              anchorX="center"
+              anchorY="middle"
+            >
+              ♥
+            </Text>
+          </group>
+          
+          <group position={[0, -0.15, 0.001]}>
+            <Text
+              fontSize={0.18}
+              color="#ffd700"
+              anchorX="center"
+              anchorY="middle"
+            >
+              ♦
+            </Text>
+          </group>
+          
+          <group position={[-0.15, 0, 0.001]}>
+            <Text
+              fontSize={0.18}
+              color="#ffd700"
+              anchorX="center"
+              anchorY="middle"
+            >
+              ♣
+            </Text>
+          </group>
+        </group>
+        
+        {/* Pattern lines */}
+        <group position={[0, 0, 0.0025]}>
+          {Array.from({ length: 10 }).map((_, i) => (
+            <mesh key={`hline-${i}`} position={[0, -height/2 + 0.2 + i * (height - 0.4)/9, 0]}>
+              <planeGeometry args={[width - 0.4, 0.01]} />
+              <meshStandardMaterial 
+                color="#c09000" 
+                metalness={0.9} 
+                transparent={true}
+                opacity={0.5}
+                side={DoubleSide}
+              />
+            </mesh>
+          ))}
+          
+          {Array.from({ length: 10 }).map((_, i) => (
+            <mesh key={`vline-${i}`} position={[-width/2 + 0.2 + i * (width - 0.4)/9, 0, 0]}>
+              <planeGeometry args={[0.01, height - 0.4]} />
+              <meshStandardMaterial 
+                color="#c09000" 
+                metalness={0.9} 
+                transparent={true}
+                opacity={0.5}
+                side={DoubleSide}
+              />
+            </mesh>
+          ))}
+        </group>
       </group>
 
       {/* Replace the toggle button with an instructional label */}
