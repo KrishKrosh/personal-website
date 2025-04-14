@@ -235,91 +235,9 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     }
   }, []);
 
-  // Card back material with rounded corners using shader
-  const cardBackMaterial = useMemo(() => {
-    if (!cardBackTexture) return null;
-    
-    return new ShaderMaterial({
-      uniforms: {
-        map: { value: cardBackTexture },
-        cardSize: { value: new Vector3(width, height, 0) },
-        cornerRadius: { value: cornerRadius },
-        textureAspectRatio: { value: 1.0 } // Default to 1:1 aspect ratio
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform sampler2D map;
-        uniform vec3 cardSize;
-        uniform float cornerRadius;
-        uniform float textureAspectRatio;
-        varying vec2 vUv;
-        
-        void main() {
-          // Convert UV from 0-1 range to actual card dimensions
-          vec2 cardPoint = vec2(
-            (vUv.x - 0.5) * cardSize.x,
-            (vUv.y - 0.5) * cardSize.y
-          );
-          
-          // Calculate distances from corners
-          float topRight = length(max(vec2(0.0), cardPoint - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
-          float topLeft = length(max(vec2(0.0), vec2(-cardPoint.x, cardPoint.y) - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
-          float bottomRight = length(max(vec2(0.0), vec2(cardPoint.x, -cardPoint.y) - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
-          float bottomLeft = length(max(vec2(0.0), -cardPoint - vec2(cardSize.x/2.0 - cornerRadius, cardSize.y/2.0 - cornerRadius)));
-          
-          // Apply corner clipping
-          if (topRight > cornerRadius || topLeft > cornerRadius || 
-              bottomRight > cornerRadius || bottomLeft > cornerRadius) {
-            discard;
-          }
-          
-          // Calculate adjusted UVs for proper texture scaling
-          vec2 adjustedUV = vUv;
-          float cardAspectRatio = cardSize.x / cardSize.y;
-          
-          if (textureAspectRatio > cardAspectRatio) {
-            // Image is wider than card - scale to match height
-            float scale = cardAspectRatio / textureAspectRatio;
-            adjustedUV.x = (vUv.x - 0.5) * scale + 0.5;
-          } else {
-            // Image is taller than card - scale to match width
-            float scale = textureAspectRatio / cardAspectRatio;
-            adjustedUV.y = (vUv.y - 0.5) * scale + 0.5;
-          }
-          
-          // Sample texture with adjusted UVs
-          vec4 color = texture2D(map, adjustedUV);
-          
-          // Apply gold metallic tint
-          color.rgb = mix(color.rgb, vec3(1.0, 0.84, 0.0), 0.15);
-          
-          // Simulate metallic sheen at edges
-          float edgeFactor = 1.0 - min(
-            min(distance(vUv.x, 0.0), distance(vUv.x, 1.0)),
-            min(distance(vUv.y, 0.0), distance(vUv.y, 1.0))
-          ) * 5.0;
-          
-          color.rgb += vec3(edgeFactor * 0.1);
-          
-          gl_FragColor = color;
-        }
-      `,
-      transparent: true,
-      side: DoubleSide
-    });
-  }, [cardBackTexture, width, height, cornerRadius]);
-
   // Image aspect ratio tracking
   const [imageAspectRatio, setImageAspectRatio] = useState(1);
   const [realPhotoAspectRatio, setRealPhotoAspectRatio] = useState(1);
-  const [cardBackAspectRatio, setCardBackAspectRatio] = useState(1);
 
   // Update image aspect ratio once loaded
   useEffect(() => {
@@ -336,21 +254,7 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       // Basic texture settings for better quality
       realPhotoTexture.anisotropy = 16;
     }
-    
-    if (cardBackTexture && cardBackTexture.image) {
-      setCardBackAspectRatio(cardBackTexture.image.width / cardBackTexture.image.height);
-      
-      // Basic texture settings for better quality
-      cardBackTexture.anisotropy = 16;
-    }
-  }, [cardTexture, realPhotoTexture, cardBackTexture]);
-  
-  // Update card back shader uniform when aspect ratio changes
-  useEffect(() => {
-    if (cardBackMaterial && 'uniforms' in cardBackMaterial) {
-      cardBackMaterial.uniforms.textureAspectRatio.value = cardBackAspectRatio;
-    }
-  }, [cardBackMaterial, cardBackAspectRatio]);
+  }, [cardTexture, realPhotoTexture]);
   
   // Reset to illustrated version when card is deselected
   useEffect(() => {
@@ -1052,11 +956,17 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
 
       {/* Card back design - intricate */}
       <group position={[0, 0, -thickness / 2 - 0.001]} rotation={[Math.PI, 0, 0]} renderOrder={1}>
-        {/* Card back with shader-based rounded corners */}
+        {/* Base layer with card back texture */}
         <mesh>
-          <planeGeometry args={[width, height]} />
-          {cardBackTexture && !cardBackTextureError && cardBackMaterial ? (
-            <primitive object={cardBackMaterial} attach="material" />
+          <planeGeometry args={[width - 0.05, height - 0.05]} />
+          {cardBackTexture && !cardBackTextureError ? (
+            <meshStandardMaterial 
+              color="#ffffff"
+              map={cardBackTexture} 
+              metalness={0.5} 
+              roughness={0.3} 
+              side={DoubleSide}
+            />
           ) : (
             <meshStandardMaterial 
               color="#ffd700" 
@@ -1066,19 +976,30 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
             />
           )}
         </mesh>
-        
-        {/* Gold border - only shown when no texture is available */}
-        {(!cardBackTexture || cardBackTextureError) && (
-          <mesh position={[0, 0, 0.0015]}>
-            <ringGeometry args={[width/2 - 0.15, width/2 - 0.1, 32]} />
-            <meshStandardMaterial 
-              color="#ffd700" 
-              metalness={0.9} 
-              roughness={0.1} 
-              side={DoubleSide}
-            />
-          </mesh>
-        )}
+
+        {/* Gold shimmer overlay */}
+        <mesh position={[0, 0, 0.001]}>
+          <planeGeometry args={[width - 0.15, height - 0.15]} />
+          <meshStandardMaterial 
+            color="#ffd700" 
+            metalness={0.9} 
+            roughness={0.2} 
+            transparent={true}
+            opacity={0.2}
+            side={DoubleSide}
+          />
+        </mesh>
+
+        {/* Gold border */}
+        <mesh position={[0, 0, 0.0015]}>
+          <ringGeometry args={[width/2 - 0.15, width/2 - 0.1, 32]} />
+          <meshStandardMaterial 
+            color="#ffd700" 
+            metalness={0.9} 
+            roughness={0.1} 
+            side={DoubleSide}
+          />
+        </mesh>
       </group>
 
       {/* Replace the toggle button with an instructional label */}
