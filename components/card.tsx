@@ -60,6 +60,53 @@ const getCardBackTexture = (() => {
   };
 })();
 
+// Function to get the metallic mask texture
+const getMetallicMaskTexture = (() => {
+  let texture: Texture | null = null;
+  let loading = false;
+  let listeners: ((texture: Texture | null) => void)[] = [];
+  
+  return (callback?: (texture: Texture | null) => void) => {
+    // Return cached texture if available
+    if (texture) {
+      if (callback) callback(texture);
+      return texture;
+    }
+    
+    // Add callback to listeners
+    if (callback) listeners.push(callback);
+    
+    // Start loading if not already in progress
+    if (!loading) {
+      loading = true;
+      const loader = new TextureLoader();
+      loader.load(
+        "/images/card-back-metallic-mask-basic.png",
+        (loadedTexture) => {
+          texture = loadedTexture;
+          
+          // Apply texture optimization settings
+          texture.anisotropy = 16;
+          texture.needsUpdate = true;
+          
+          // Notify all listeners
+          listeners.forEach(listener => listener(texture));
+          listeners = [];
+        },
+        undefined,
+        (error) => {
+          console.warn("Metallic mask texture failed to load:", error);
+          // Notify listeners of failure
+          listeners.forEach(listener => listener(null));
+          listeners = [];
+        }
+      );
+    }
+    
+    return null;
+  };
+})();
+
 // Function to get shared texture for card faces
 const getSharedTexture = (path: string): Texture | null => {
   if (textureCache[path]) {
@@ -296,6 +343,8 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
   const [cardBackTextureError, setCardBackTextureError] = useState(false);
   const [cardBackAspectRatio, setCardBackAspectRatio] = useState(1);
   const [loadedCardBackTexture, setLoadedCardBackTexture] = useState<Texture | null>(null);
+  const [loadedMetallicMaskTexture, setLoadedMetallicMaskTexture] = useState<Texture | null>(null);
+  const [metallicIntensity, setMetallicIntensity] = useState(1.5); // Control metallic effect intensity
   
   // Use the shared card back texture
   useEffect(() => {
@@ -318,6 +367,13 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
         setCardBackAspectRatio(texture.image.width / texture.image.height);
       }
     }
+
+    // Load the metallic mask texture
+    getMetallicMaskTexture((texture) => {
+      if (texture) {
+        setLoadedMetallicMaskTexture(texture);
+      }
+    });
   }, []);
   
   // Create a custom shader material for the card back that will properly display the texture
@@ -328,30 +384,82 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     return new ShaderMaterial({
       uniforms: {
         map: { value: loadedCardBackTexture },
+        metallicMap: { value: loadedMetallicMaskTexture },
         cardSize: { value: new Vector3(width, height, 0) },
         cornerRadius: { value: cornerRadius },
         shineColor: { value: new Vector3(1.0, 0.843, 0.0) }, // Gold shine color in RGB
-        shineOpacity: { value: 0.3 },
+        shineIntensity: { value: 0.3 }, // Add shine intensity uniform
         borderWidth: { value: 0.05 },
-        textureAspectRatio: { value: cardBackAspectRatio }
+        textureAspectRatio: { value: cardBackAspectRatio },
+        time: { value: 0.0 }, // Time uniform for animated reflections
+        viewPosition: { value: new Vector3() }, // Camera position for reflections
+        metallicIntensity: { value: metallicIntensity }, // Metallic effect intensity
+        reflectionStrength: { value: 0.8 } // Overall reflection strength
       },
       vertexShader: `
         varying vec2 vUv;
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        varying vec3 vWorldPosition;
         
         void main() {
           vUv = uv;
+          vNormal = normalize(normalMatrix * normal);
+          
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPosition.xyz;
+          vViewPosition = cameraPosition - worldPosition.xyz;
+          
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
       fragmentShader: `
         uniform sampler2D map;
+        uniform sampler2D metallicMap;
         uniform vec3 cardSize;
         uniform float cornerRadius;
         uniform vec3 shineColor;
-        uniform float shineOpacity;
+        uniform float shineIntensity; 
         uniform float borderWidth;
         uniform float textureAspectRatio;
+        uniform float time;
+        uniform vec3 viewPosition;
+        uniform float metallicIntensity;
+        uniform float reflectionStrength;
+        
         varying vec2 vUv;
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        varying vec3 vWorldPosition;
+        
+        // Function to create detailed reflection pattern
+        float reflectionPattern(vec2 uv, float time) {
+          // Multi-layered noise for a more complex reflection pattern
+          float pattern1 = sin(uv.x * 10.0 + time) * cos(uv.y * 8.0 - time * 0.5);
+          float pattern2 = sin(uv.x * 5.0 - time * 0.7) * sin(uv.y * 7.0 + time * 0.3);
+          float pattern3 = cos(uv.x * 3.0 + uv.y * 4.0 + time);
+          
+          // Combine patterns with different weights
+          return (pattern1 * 0.5 + pattern2 * 0.3 + pattern3 * 0.2) * 0.5 + 0.5;
+        }
+        
+        // Environment mapping approximation
+        vec3 envReflection(vec3 normal, vec3 viewDir) {
+          // Fake environment mapping by creating a gradient based on view and normal
+          vec3 reflection = reflect(-viewDir, normal);
+          
+          // Create a simple gradient with brighter top and darker bottom
+          float yGradient = reflection.y * 0.5 + 0.5;
+          
+          // Add some color variation based on direction
+          vec3 envColor = mix(
+            vec3(0.2, 0.3, 0.4), // darker blue color for bottom reflections
+            vec3(1.0, 0.95, 0.8), // warm highlight color for top reflections
+            yGradient
+          );
+          
+          return envColor;
+        }
         
         void main() {
           // Convert UV from 0-1 range to actual card dimensions
@@ -389,6 +497,49 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
           // Sample the texture with adjusted coordinates
           vec4 texColor = texture2D(map, adjustedUV);
           
+          // Sample the metallic mask
+          vec4 metallicMask = texture2D(metallicMap, adjustedUV);
+          float metalness = clamp(metallicMask.r * 2.0, 0.0, 1.0); // Use red channel as metalness factor, boost it
+          
+          // Calculate viewing angle for reflection
+          vec3 viewDirection = normalize(vViewPosition);
+          vec3 normal = vNormal;
+          
+          // Create more varied normal for complex reflection patterns
+          // Apply some normal perturbation based on time for dynamic "waves" effect
+          normal = normalize(normal + 0.15 * vec3(
+            sin(time * 0.7 + vWorldPosition.x * 2.0),
+            sin(time * 0.8 + vWorldPosition.y * 3.0),
+            sin(time * 0.9 + vWorldPosition.z * 2.5)
+          ) * metalness);
+          
+          // Enhanced Fresnel effect with better angle falloff
+          float fresnelBase = 1.0 - max(0.0, dot(normal, viewDirection));
+          float fresnelFactor = 0.2 + 0.8 * pow(fresnelBase, 2.0); // Stronger fresnel
+          
+          // Get environment reflection colors
+          vec3 envColors = envReflection(normal, viewDirection);
+          
+          // Create a complex moving reflection pattern
+          float reflectionPhase = reflectionPattern(adjustedUV, time * 0.8);
+          
+          // Calculate specular highlights based on multiple light sources
+          vec3 lightDir1 = normalize(vec3(1.0, 1.0, 1.0));
+          vec3 lightDir2 = normalize(vec3(-1.0, 0.5, 0.5));
+          vec3 lightDir3 = normalize(vec3(sin(time * 0.5), 0.5, cos(time * 0.5))); // Moving light
+          
+          vec3 halfVector1 = normalize(viewDirection + lightDir1);
+          vec3 halfVector2 = normalize(viewDirection + lightDir2);
+          vec3 halfVector3 = normalize(viewDirection + lightDir3);
+          
+          float specular1 = pow(max(0.0, dot(normal, halfVector1)), 30.0) * 0.6;
+          float specular2 = pow(max(0.0, dot(normal, halfVector2)), 20.0) * 0.3;
+          float specular3 = pow(max(0.0, dot(normal, halfVector3)), 50.0) * 0.7; // Sharper highlight from moving light
+          float combinedSpecular = specular1 + specular2 + specular3;
+          
+          // Combine all reflection factors
+          float reflection = clamp((fresnelFactor * 0.6 + reflectionPhase * 0.2 + combinedSpecular) * metalness * reflectionStrength, 0.0, 1.0);
+          
           // Calculate border effect
           float distFromEdgeX = min(vUv.x, 1.0 - vUv.x);
           float distFromEdgeY = min(vUv.y, 1.0 - vUv.y);
@@ -396,13 +547,22 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
           
           // Create gold shimmer effect near the edges and for the border
           float borderFactor = smoothstep(0.0, borderWidth, distFromEdge);
-          float shimmerIntensity = (1.0 - borderFactor) * shineOpacity;
+          float shimmerIntensity = (1.0 - borderFactor) * shineIntensity;
           
           // Add subtle shine variation based on position
           float shine = shimmerIntensity * (0.8 + 0.2 * sin(vUv.x * 20.0) * sin(vUv.y * 20.0));
           
-          // Mix the texture with the gold shine
-          vec3 finalColor = mix(texColor.rgb, shineColor, shine);
+          // Apply a metallic color shift effect based on environment lighting
+          vec3 metallicColor = texColor.rgb * mix(vec3(1.0), envColors * metallicIntensity, metalness);
+          
+          // Mix the texture with metallicColor based on reflection
+          vec3 finalColor = mix(texColor.rgb, metallicColor, reflection);
+          
+          // Add specular highlights directly
+          finalColor += vec3(combinedSpecular * metalness * 0.6);
+          
+          // Then add the gold shine for borders
+          finalColor = mix(finalColor, shineColor, shine);
           
           gl_FragColor = vec4(finalColor, 1.0);
         }
@@ -410,35 +570,31 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       transparent: false,
       side: DoubleSide
     });
-  }, [loadedCardBackTexture, cardBackTextureError, width, height, cornerRadius, cardBackAspectRatio]);
-
-  // Image aspect ratio tracking
-  const [imageAspectRatio, setImageAspectRatio] = useState(1);
-  const [realPhotoAspectRatio, setRealPhotoAspectRatio] = useState(1);
-
-  // Update image aspect ratio once loaded
-  useEffect(() => {
-    if (cardTexture && cardTexture.image) {
-      setImageAspectRatio(cardTexture.image.width / cardTexture.image.height);
-      
-      // Basic texture settings for better quality
-      cardTexture.anisotropy = 16;
-    }
-    
-    if (realPhotoTexture && realPhotoTexture.image) {
-      setRealPhotoAspectRatio(realPhotoTexture.image.width / realPhotoTexture.image.height);
-      
-      // Basic texture settings for better quality
-      realPhotoTexture.anisotropy = 16;
-    }
-  }, [cardTexture, realPhotoTexture]);
+  }, [loadedCardBackTexture, loadedMetallicMaskTexture, cardBackTextureError, width, height, cornerRadius, cardBackAspectRatio, metallicIntensity]);
   
-  // Update shader uniforms when aspect ratio changes
-  useEffect(() => {
+  // Update the time uniform in shader for animated reflections
+  useFrame((state) => {
     if (cardBackMaterial && 'uniforms' in cardBackMaterial) {
-      cardBackMaterial.uniforms.textureAspectRatio.value = cardBackAspectRatio;
+      cardBackMaterial.uniforms.time.value = state.clock.getElapsedTime();
+      
+      // Update the view position for reflections
+      if (camera && camera.position) {
+        cardBackMaterial.uniforms.viewPosition.value.copy(camera.position);
+      }
+      
+      // Dynamically update shininess based on card motion
+      if (meshRef.current) {
+        const speed = meshRef.current.position.distanceTo(prevStateRef.current.position) * 50;
+        cardBackMaterial.uniforms.shineIntensity.value = Math.min(1.0, 0.3 + speed * 0.5);
+        
+        // Make reflection stronger when card is moving
+        cardBackMaterial.uniforms.reflectionStrength.value = Math.min(1.0, 0.8 + speed * 0.7);
+        
+        // Increase metallic intensity when moving fast
+        cardBackMaterial.uniforms.metallicIntensity.value = Math.min(3.0, metallicIntensity + speed * 1.2);
+      }
     }
-  }, [cardBackMaterial, cardBackAspectRatio]);
+  });
   
   // Reset to illustrated version when card is deselected
   useEffect(() => {
@@ -558,6 +714,34 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       side: DoubleSide
     });
   }, [cardTexture, realPhotoTexture, transitionProgress, width, height, cornerRadius]);
+  
+  // Image aspect ratio tracking
+  const [imageAspectRatio, setImageAspectRatio] = useState(1);
+  const [realPhotoAspectRatio, setRealPhotoAspectRatio] = useState(1);
+
+  // Update image aspect ratio once loaded
+  useEffect(() => {
+    if (cardTexture && cardTexture.image) {
+      setImageAspectRatio(cardTexture.image.width / cardTexture.image.height);
+      
+      // Basic texture settings for better quality
+      cardTexture.anisotropy = 16;
+    }
+    
+    if (realPhotoTexture && realPhotoTexture.image) {
+      setRealPhotoAspectRatio(realPhotoTexture.image.width / realPhotoTexture.image.height);
+      
+      // Basic texture settings for better quality
+      realPhotoTexture.anisotropy = 16;
+    }
+  }, [cardTexture, realPhotoTexture]);
+  
+  // Update shader uniforms when aspect ratio changes
+  useEffect(() => {
+    if (cardBackMaterial && 'uniforms' in cardBackMaterial) {
+      cardBackMaterial.uniforms.textureAspectRatio.value = cardBackAspectRatio;
+    }
+  }, [cardBackMaterial, cardBackAspectRatio]);
 
   // Create card geometry
   const cardGeometry = useMemo(() => {
