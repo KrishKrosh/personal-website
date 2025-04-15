@@ -927,6 +927,11 @@ export default function CardDeckScene() {
             /* margin-right: -175px; */
           }
         }
+
+        .card-info-panel.active {
+          opacity: 1;
+          pointer-events: auto;
+        }
         
         .card-info-panel h2 {
           font-size: 2.2rem; /* Increased size */
@@ -995,6 +1000,11 @@ export default function CardDeckScene() {
             /* Ensure text alignment is centered on mobile (overrides p style) */
             text-align: center;
           }
+         
+        .card-info-panel.active {
+          opacity: 1;
+          pointer-events: auto;
+        }
           
           .card-info-panel h2 {
             font-size: 1.6rem; /* Slightly smaller heading */
