@@ -84,7 +84,7 @@ export default function CardDeck({ hovered, expanded, onSelectionChange }: CardD
           // Random rotation for when expanded
           rotation: [Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2],
           // Radius for the globe formation
-          radius: isMobile ? 3 + Math.random() * 1.5 : 4 + Math.random() * 1.5, // Range [3, 4] - Reduced for denser packing
+          radius: isMobile ? 3 + Math.random() * 1.5 : 3.25 + Math.random() * 1.5, // Range [3, 4] - Reduced for denser packing
           // Random speed for rotation - reduced for better performance
           speed: 0.1 + Math.random() * 0.2,
           // Random phase for varied movement
