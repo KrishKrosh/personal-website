@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect } from "react"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { Environment, OrbitControls, Plane, useTexture } from "@react-three/drei"
-import { Group, Camera, Vector3, Color, MeshStandardMaterial, ShaderMaterial, PointLight } from "three"
+import { Group, Camera, Vector3, Color, MeshStandardMaterial, ShaderMaterial, PointLight, DirectionalLight } from "three"
 import CardDeck from "./card-deck"
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 
@@ -1056,6 +1056,15 @@ export default function CardDeckScene() {
 
             {/* Golden rim light */}
             <pointLight position={[-5, 0, -5]} intensity={0.8} color="#ffd700" />
+
+            {/* New: Directional light above camera, aimed at card deck for strong reflections */}
+            <directionalLight
+              position={[0, 2, 8]} // Above and in front of camera
+              intensity={2.5}
+              color="#ffffff"
+              target-position={[0, 0, 0]} // Aiming at the card deck center
+              castShadow={false}
+            />
             
             {/* Dynamic moving light for reflections */}
             <MovingLight />
