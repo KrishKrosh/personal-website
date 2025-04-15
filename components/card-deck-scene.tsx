@@ -541,19 +541,19 @@ export default function CardDeckScene() {
       setProgress(charIndex / text.length);
       
       // Determine delay based on punctuation
-      let nextCharDelay = 30; // Base delay
+      let nextCharDelay = 10; // Base delay
       const currentChar = text[charIndex - 1];
       
       if (currentChar === '.') {
-        nextCharDelay = 450; // Longer pause after periods
+        nextCharDelay = 300; // Longer pause after periods
       } else if (currentChar === ',') {
-        nextCharDelay = 200; // Medium pause after commas
+        nextCharDelay = 150; // Medium pause after commas
       } else if (currentChar === ' ') {
-        nextCharDelay = 50; // Slight pause after spaces
+        nextCharDelay = 30; // Slight pause after spaces
       } else if (currentChar === '?') {
-        nextCharDelay = 350; // Pause after question marks
+        nextCharDelay = 250; // Pause after question marks
       } else if (currentChar === '!') {
-        nextCharDelay = 400; // Pause after exclamation marks
+        nextCharDelay = 250; // Pause after exclamation marks
       }
       
       // Schedule next character animation only if we're still in the same animation cycle
@@ -593,27 +593,27 @@ export default function CardDeckScene() {
       {
         text: `Ah yes. The ${cardName}. Beautiful isn't it?`,
         setProgress: setParagraph1Progress,
-        delay: 1000,
+        delay: 500,
       },
       {
         text: getCardStoryText(cardId),
         setProgress: setParagraph2Progress,
-        delay: 1000,
+        delay: 500,
       },
       {
         text: `Me? Well I spend most of my time tinkering with technology.`,
         setProgress: setParagraph3Progress,
-        delay: 1000,
+        delay: 500,
       },
       {
         text: `Why? Because it reminds me of magic, of course.`,
         setProgress: setParagraph4Progress,
-        delay: 1000,
+        delay: 500,
       },
       {
         text: `More? Well I guess I could share a couple of my notes with you.`,
         setProgress: setParagraph5Progress,
-        delay: 1000,
+        delay: 500,
       },
       {
         text: `Visit notes.krishkrosh.com`,
