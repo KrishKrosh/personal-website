@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect } from "react"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { Environment, OrbitControls, Plane, useTexture } from "@react-three/drei"
-import { Group, Camera, Vector3, Color, MeshStandardMaterial, ShaderMaterial } from "three"
+import { Group, Camera, Vector3, Color, MeshStandardMaterial, ShaderMaterial, PointLight } from "three"
 import CardDeck from "./card-deck"
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 
@@ -805,7 +805,7 @@ export default function CardDeckScene() {
     >
       {/* Context lost message */}
       {contextLost && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 text-white">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black text-white">
           <div className="rounded-lg bg-black/90 p-6 text-center">
             <h2 className="mb-4 text-xl font-semibold">Recovering WebGL context...</h2>
             <p>The 3D environment is reloading. This should only take a moment.</p>
@@ -1016,12 +1016,12 @@ export default function CardDeckScene() {
             <CameraBackground pauseAnimations={cardSelected} />
             
             {/* Ambient light for base illumination */}
-            <ambientLight intensity={0.2} />
+            <ambientLight intensity={0.25} />
 
             {/* Main directional light with shadow - reduced shadow map size */}
             <directionalLight
               position={[5, 5, 5]}
-              intensity={1}
+              intensity={1.2}
               color="#fff9d6"
               castShadow
               shadow-mapSize-width={512}
@@ -1033,6 +1033,9 @@ export default function CardDeckScene() {
 
             {/* Golden rim light */}
             <pointLight position={[-5, 0, -5]} intensity={0.8} color="#ffd700" />
+            
+            {/* Dynamic moving light for reflections */}
+            <MovingLight />
 
             <CardDeck 
               hovered={hovered} 
@@ -1040,8 +1043,8 @@ export default function CardDeckScene() {
               onSelectionChange={handleCardSelectionChange}
             />
 
-            {/* Environment for reflections - using a simpler preset */}
-            <Environment preset="night" />
+            {/* Environment for reflections - using a more reflective preset */}
+            <Environment preset="studio" />
 
             {/* Scene Controls */}
             <SceneController expanded={expanded} cardSelected={cardSelected} isMobile={isMobile} />
@@ -1165,4 +1168,26 @@ function SceneController({ expanded, cardSelected, isMobile }: SceneControllerPr
       rotateSpeed={isMobile ? 0.5 : 1} // Slower rotation on mobile
     />
   )
+}
+
+function MovingLight() {
+  const lightRef = useRef<PointLight>(null);
+  const { clock } = useThree();
+
+  useFrame(() => {
+    if (lightRef.current) {
+      const time = clock.getElapsedTime();
+      lightRef.current.position.x = Math.sin(time) * 5;
+      lightRef.current.position.z = Math.cos(time) * 5;
+    }
+  });
+
+  return (
+    <pointLight
+      ref={lightRef}
+      intensity={0.5}
+      color="#ff69b4"
+      position={[0, 0, 0]}
+    />
+  );
 }
