@@ -81,7 +81,7 @@ const getMetallicMaskTexture = (() => {
       loading = true;
       const loader = new TextureLoader();
       loader.load(
-        "/images/card-back-metallic-mask-basic.png",
+        "/images/card-back-metallic-mask.png",
         (loadedTexture) => {
           texture = loadedTexture;
           
