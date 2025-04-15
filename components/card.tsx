@@ -4,8 +4,83 @@ import { useRef, useState, useMemo, useEffect } from "react"
 import { useFrame, useThree } from "@react-three/fiber"
 import { MeshStandardMaterial, DoubleSide, Vector3, Group, Shape, ExtrudeGeometry, 
          MeshBasicMaterial, Euler, Quaternion, Matrix4, TextureLoader, ShaderMaterial,
-         PlaneGeometry, RingGeometry } from "three"
+         PlaneGeometry, RingGeometry, Texture, Cache } from "three"
 import { Text, useTexture } from "@react-three/drei"
+
+// Enable texture caching to prevent redundant decoding
+Cache.enabled = true;
+
+// Global texture cache
+const textureCache: { [key: string]: Texture } = {};
+
+// Shared card back texture loader (singleton)
+const getCardBackTexture = (() => {
+  let texture: Texture | null = null;
+  let loading = false;
+  let listeners: ((texture: Texture | null) => void)[] = [];
+  
+  return (callback?: (texture: Texture | null) => void) => {
+    // Return cached texture if available
+    if (texture) {
+      if (callback) callback(texture);
+      return texture;
+    }
+    
+    // Add callback to listeners
+    if (callback) listeners.push(callback);
+    
+    // Start loading if not already in progress
+    if (!loading) {
+      loading = true;
+      const loader = new TextureLoader();
+      loader.load(
+        "/images/card-back.png",
+        (loadedTexture) => {
+          texture = loadedTexture;
+          
+          // Apply texture optimization settings
+          texture.anisotropy = 16;
+          texture.needsUpdate = true;
+          
+          // Notify all listeners
+          listeners.forEach(listener => listener(texture));
+          listeners = [];
+        },
+        undefined,
+        (error) => {
+          console.warn("Card back texture failed to load:", error);
+          // Notify listeners of failure
+          listeners.forEach(listener => listener(null));
+          listeners = [];
+        }
+      );
+    }
+    
+    return null;
+  };
+})();
+
+// Function to get shared texture for card faces
+const getSharedTexture = (path: string): Texture | null => {
+  if (textureCache[path]) {
+    return textureCache[path];
+  }
+  
+  // Start loading the texture
+  const loader = new TextureLoader();
+  loader.load(
+    path,
+    (loadedTexture) => {
+      // Optimize texture
+      loadedTexture.anisotropy = 16;
+      loadedTexture.needsUpdate = true;
+      // Cache the texture
+      textureCache[path] = loadedTexture;
+    }
+  );
+  
+  return null;
+};
 
 // Card suits and values
 const suits = ["♠", "♥", "♦", "♣"]
@@ -209,50 +284,50 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
   }, [value, suit, hasRealPhoto]);
   
   // Only load texture if we know the image exists
-  const cardTexture = hasCustomImage ? useTexture(cardImagePath) : null;
-  const realPhotoTexture = hasRealPhoto ? useTexture(realPhotoPath) : null;
+  const cardTexture = hasCustomImage ? 
+    (cardImagePath ? (textureCache[cardImagePath] || getSharedTexture(cardImagePath)) : null) : 
+    null;
+  
+  const realPhotoTexture = hasRealPhoto ? 
+    (realPhotoPath ? (textureCache[realPhotoPath] || getSharedTexture(realPhotoPath)) : null) : 
+    null;
   
   // Card back texture with error handling
   const [cardBackTextureError, setCardBackTextureError] = useState(false);
   const [cardBackAspectRatio, setCardBackAspectRatio] = useState(1);
-  const cardBackTexture = useMemo(() => {
-    try {
-      // Create a texture loader with error handling
-      const loader = new TextureLoader();
-      const texture = loader.load(
-        "/images/card-back.png",
-        (loadedTexture) => {
-          // Update aspect ratio once texture is loaded
-          if (loadedTexture.image) {
-            setCardBackAspectRatio(loadedTexture.image.width / loadedTexture.image.height);
-          }
-        },
-        undefined, // onProgress callback
-        () => {
-          console.warn("Card back texture not found, using fallback");
-          setCardBackTextureError(true);
+  const [loadedCardBackTexture, setLoadedCardBackTexture] = useState<Texture | null>(null);
+  
+  // Use the shared card back texture
+  useEffect(() => {
+    // Try to get texture from shared loader
+    const texture = getCardBackTexture((texture) => {
+      if (texture) {
+        setLoadedCardBackTexture(texture);
+        if (texture.image) {
+          setCardBackAspectRatio(texture.image.width / texture.image.height);
         }
-      );
-      
-      // Apply texture settings for better quality
-      texture.anisotropy = 16;
-      
-      return texture;
-    } catch (error) {
-      console.warn("Error loading card back texture:", error);
-      setCardBackTextureError(true);
-      return null;
+      } else {
+        setCardBackTextureError(true);
+      }
+    });
+    
+    // If texture is already available, use it immediately
+    if (texture) {
+      setLoadedCardBackTexture(texture);
+      if (texture.image) {
+        setCardBackAspectRatio(texture.image.width / texture.image.height);
+      }
     }
   }, []);
   
   // Create a custom shader material for the card back that will properly display the texture
   // while respecting rounded corners - similar to the card face material
   const cardBackMaterial = useMemo(() => {
-    if (!cardBackTexture || cardBackTextureError) return null;
+    if (!loadedCardBackTexture || cardBackTextureError) return null;
     
     return new ShaderMaterial({
       uniforms: {
-        map: { value: cardBackTexture },
+        map: { value: loadedCardBackTexture },
         cardSize: { value: new Vector3(width, height, 0) },
         cornerRadius: { value: cornerRadius },
         shineColor: { value: new Vector3(1.0, 0.843, 0.0) }, // Gold shine color in RGB
@@ -335,7 +410,7 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       transparent: false,
       side: DoubleSide
     });
-  }, [cardBackTexture, cardBackTextureError, width, height, cornerRadius, cardBackAspectRatio]);
+  }, [loadedCardBackTexture, cardBackTextureError, width, height, cornerRadius, cardBackAspectRatio]);
 
   // Image aspect ratio tracking
   const [imageAspectRatio, setImageAspectRatio] = useState(1);
@@ -943,6 +1018,34 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       window.removeEventListener('click', handleGlobalClick);
     };
   }, [isSelected, onSelect, card.id, isCardHovered]);
+
+  // Shared texture loading for use with drei's useTexture
+  useEffect(() => {
+    // Pre-load textures for face cards to prevent lag during view transitions
+    if (hasCustomImage && cardImagePath) {
+      // Add to texture cache if not already present
+      if (!textureCache[cardImagePath]) {
+        useTexture.preload(cardImagePath);
+      }
+    }
+    
+    if (hasRealPhoto && realPhotoPath) {
+      // Add to texture cache if not already present
+      if (!textureCache[realPhotoPath]) {
+        useTexture.preload(realPhotoPath);
+      }
+    }
+  }, [hasCustomImage, cardImagePath, hasRealPhoto, realPhotoPath]);
+
+  // Optimization for rendering cards that are not visible
+  // Only render detailed cards when they're visible
+  const isVisible = expanded || isSelected || (allCardsSelected && isSelected);
+  const isOffScreen = !isVisible && allCardsSelected;
+  
+  // Skip rendering cards that are definitely off-screen
+  if (isOffScreen && !isSelected) {
+    return null;
+  }
 
   return (
     <group 
