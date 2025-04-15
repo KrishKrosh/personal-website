@@ -154,22 +154,43 @@ function MysticalText() {
   const [shouldDisplay, setShouldDisplay] = useState<boolean>(true)
   const [fadeOut, setFadeOut] = useState<boolean>(false)
   const [showOnlyLastLine, setShowOnlyLastLine] = useState<boolean>(false)
-  
-  // Lines to display in sequence
-  const narrativeLines = [
-    "Nice to meet you. I'm Krish.",
-    "One fun fact about me is that I like magic.",
-    "So go ahead. Pick a card. Any card."
-  ]
+  const [narrativeLines, setNarrativeLines] = useState<string[]>([])
+
+  useEffect(() => {
+    // Easter egg: track visits using localStorage
+    const visitCount = parseInt(localStorage.getItem('mysticalTextVisitCount') || '0', 10) + 1
+    localStorage.setItem('mysticalTextVisitCount', visitCount.toString())
+    console.log(`[MysticalText] Visit count:`, visitCount)
+    if (visitCount === 2) {
+      setNarrativeLines([
+        "Nice to meet you. I'm Krish.",
+        "Wait... haven't I seen you around before?",
+        "I guess that means you know the drill."
+      ])
+    } else {
+      setNarrativeLines([
+        "Nice to meet you. I'm Krish.",
+        "One fun fact about me is that I like magic.",
+        "So go ahead. Pick a card. Any card."
+      ])
+    }
+  }, [])
   
   // Start the text animation sequence after a short delay
   useEffect(() => {
+    if (narrativeLines.length === 0) return;
     const startTextAnimation = setTimeout(() => {
       showNextLine(0)
     }, 800) // Slightly longer delay to ensure everything is loaded properly
-    
     return () => clearTimeout(startTextAnimation)
-  }, [])
+  }, [narrativeLines])
+  
+  // Lines to display in sequence
+  // const narrativeLines = [
+  //   "Nice to meet you. I'm Krish.",
+  //   "One fun fact about me is that I like magic.",
+  //   "So go ahead. Pick a card. Any card."
+  // ]
   
   // Function to show the next line with proper timing
   const showNextLine = (lineIndex: number) => {
@@ -902,11 +923,6 @@ export default function CardDeckScene() {
             /* right: 35%; */ 
             /* margin-right: -175px; */
           }
-        }
-        
-        .card-info-panel.active {
-          opacity: 1;
-          pointer-events: auto;
         }
         
         .card-info-panel h2 {
