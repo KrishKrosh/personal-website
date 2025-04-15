@@ -725,6 +725,21 @@ export default function CardDeckScene() {
     );
   };
 
+  // State to control fade-in for selected card text
+  const [showSelectedText, setShowSelectedText] = useState(false)
+
+  // When a card is selected, show all text at once with fade-in
+  useEffect(() => {
+    if (cardSelected && selectedCardId !== null) {
+      setShowSelectedText(false)
+      // Longer pause before fade-in
+      const t = setTimeout(() => setShowSelectedText(true), 700)
+      return () => clearTimeout(t)
+    } else {
+      setShowSelectedText(false)
+    }
+  }, [cardSelected, selectedCardId])
+
   useEffect(() => {
     // Add Google font to document head
     const link = document.createElement('link');
@@ -788,8 +803,6 @@ export default function CardDeckScene() {
       // Start fade-in animation after a delay to ensure previous animations are completely cleared
       safeSetTimeout(() => {
         setPanelFadeIn(true);
-        // Start the new animation sequence
-        animateCardText(cardId);
       }, 400); // Even longer delay to ensure clean state
     } else {
       setPanelFadeIn(false);
@@ -875,7 +888,7 @@ export default function CardDeckScene() {
           color: white;
           text-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
           opacity: 0;
-          transition: opacity 1s ease-in-out;
+          transition: opacity 1.5s ease-in-out;
           pointer-events: none;
         }
         
@@ -986,6 +999,16 @@ export default function CardDeckScene() {
         .clickable {
           cursor: pointer;
         }
+        
+        /* Fade-in effect for selected card text */
+        .selected-card-text {
+          opacity: 0;
+          transition: opacity 1.5s cubic-bezier(0, 0, 0.9, 1);
+        }
+        
+        .selected-card-text.fade-in {
+          opacity: 1;
+        }
       `}</style>
       
       {contextLost ? (
@@ -1050,35 +1073,25 @@ export default function CardDeckScene() {
             <SceneController expanded={expanded} cardSelected={cardSelected} isMobile={isMobile} />
           </Canvas>
           
-          {/* Card Info Panel (HTML overlay) with character-by-character animation */}
+          {/* Card Info Panel (HTML overlay) with fade-in */}
           {selectedCardId !== null && (
             <div className={`card-info-panel ${panelFadeIn ? 'active' : ''}`}>
-              <h2>
-                {renderAnimatedText(getCardName(selectedCardId), titleProgress)}
-              </h2>
-              <p>
-                {renderAnimatedText(`Ah yes. The ${getCardName(selectedCardId)}. Beautiful isn't it?`, paragraph1Progress)}
-              </p>
-              <p>
-                {renderAnimatedText(getCardStoryText(selectedCardId), paragraph2Progress)}
-              </p>
-              <p>
-                {renderAnimatedText(`Me? Well I spend most of my time tinkering with technology.`, paragraph3Progress)}
-              </p>
-              <p>
-                {renderAnimatedText(`Why? Because it reminds me of magic, of course.`, paragraph4Progress)}
-              </p>
-              <p>
-                {renderAnimatedText(`More? Well I guess I could share a couple of my notes with you.`, paragraph5Progress)}
-              </p>
-              <a 
-                href="https://notes.krishkrosh.com" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="clickable"
-              >
-                {renderAnimatedText(`Visit notes.krishkrosh.com`, linkProgress)}
-              </a>
+              <div className={`selected-card-text ${showSelectedText ? 'fade-in' : ''}`}>
+                <h2>{getCardName(selectedCardId)}</h2>
+                <p>Ah yes. The {getCardName(selectedCardId)}. Beautiful isn't it?</p>
+                <p>{getCardStoryText(selectedCardId)}</p>
+                <p>Me? Well I spend most of my time tinkering with technology.</p>
+                <p>Why? Because it reminds me of magic, of course.</p>
+                <p>More? Well I guess I could share a couple of my notes with you.</p>
+                <a 
+                  href="https://notes.krishkrosh.com" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="clickable"
+                >
+                  Visit notes.krishkrosh.com
+                </a>
+              </div>
             </div>
           )}
           
