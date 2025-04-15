@@ -310,6 +310,9 @@ function MysticalText() {
             </div>
           );
         })}
+        <p className="text-slate-600 p-2 hover:text-slate-800">
+          I don't want to play your games, show me the good stuff.
+        </p>
       </div>
     ) : null,
     allowInteraction,
