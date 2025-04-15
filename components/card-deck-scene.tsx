@@ -310,9 +310,6 @@ function MysticalText() {
             </div>
           );
         })}
-        <p className="text-slate-600 p-2 hover:text-slate-800">
-          I don't want to play your games, show me the good stuff.
-        </p>
       </div>
     ) : null,
     allowInteraction,
@@ -373,27 +370,49 @@ export default function CardDeckScene() {
 
   // Map to store custom text for different cards
   // This is a central place to define all card-specific stories
-  const cardStoryMap: Record<string, string> = {
+  type CardInfo = {
+    text: string
+    link: string
+  }
+  
+  const cardStoryMap: Record<string, CardInfo> = {
     // Jack cards (customize these messages as desired)
-    "10-0": "the time I first pet a robot dog myself", // Jack of Spades
-    "10-1": "the time I built my first computer when I was 14", // Jack of Hearts
-    "10-2": "the time I played my first game of chess", // Jack of Diamonds
-    "10-3": "the time I went to my first speedcubing competition", // Jack of Clubs
+    "10-0": { text: "the time I first pet a robot dog myself", link: "https://www.youtube.com/watch?v=K5xQ9iPTfZg" }, // Jack of Spades
+    "10-1": { text: "the time I built my first computer when I was 14", link: "https://www.youtube.com/watch?v=K5xQ9iPTfZg" }, // Jack of Hearts
+    "10-2": { text: "the time I played my first game of chess", link: "https://www.youtube.com/watch?v=K5xQ9iPTfZg" }, // Jack of Diamonds
+    "10-3": { text: "the time I went to my first speedcubing competition", link: "https://www.youtube.com/watch?v=K5xQ9iPTfZg" }, // Jack of Clubs
     
     // Queen cards (customize these messages as desired)
-    "11-0": "the months I worked on InternetActivism", // Queen of Spades
-    "11-1": "my very first non-sunday Socratica event", // Queen of Hearts
-    "11-2": "the many hours I spent inside my Quest and Vision Pro", // Queen of Diamonds
-    "11-3": "when I snowboarded in the Swiss Alps (and got a concussion)", // Queen of Clubs
+    "11-0": { text: "the months I worked on InternetActivism", link: "https://www.youtube.com/watch?v=K5xQ9iPTfZg" }, // Queen of Spades
+    "11-1": { text: "my very first non-sunday Socratica event", link: "https://www.youtube.com/watch?v=K5xQ9iPTfZg" }, // Queen of Hearts
+    "11-2": { text: "the many hours I spent inside my Quest and Vision Pro", link: "https://www.youtube.com/watch?v=K5xQ9iPTfZg" }, // Queen of Diamonds
+    "11-3": { text: "when I snowboarded in the Swiss Alps (and got a concussion)", link: "https://www.youtube.com/watch?v=K5xQ9iPTfZg" }, // Queen of Clubs
     
     // King cards (customize these messages as desired)
-    "12-0": "the time I built a hair cutting robot", // King of Spades
-    "12-1": "the time I made a record-breaking card launcher", // King of Hearts
-    "12-2": "the time I took meetings with electrodes stuck to my head", // King of Diamonds
-    "12-3": "the time I hosted the biggest robot hackathon in history" // King of Clubs
+    "12-0": { text: "the time I built a hair cutting robot", link: "https://www.youtube.com/watch?v=K5xQ9iPTfZg" }, // King of Spades
+    "12-1": { text: "the time I made a record-breaking card launcher", link: "https://www.youtube.com/watch?v=K5xQ9iPTfZg" }, // King of Hearts
+    "12-2": { text: "the time I took meetings with electrodes stuck to my head", link: "https://www.youtube.com/watch?v=K5xQ9iPTfZg" }, // King of Diamonds
+    "12-3": { text: "the time I hosted the biggest robot hackathon in history", link: "https://www.youtube.com/watch?v=K5xQ9iPTfZg" } // King of Clubs
   };
-  
-  // Helper function to get card story text based on cardId
+
+  const exclamations = [
+    "Beautiful isn't it?",
+    "I love this one.",
+    "This is a keeper.",
+    "Very cool."
+  ];
+
+// map from card id to random exclamations
+const [cardExclamationsMap, setCardExclamationsMap] = useState<Map<number, string>>(new Map());
+
+useEffect(() => {
+  const newMap = new Map<number, string>();
+  for (let i = 0; i < 52; i++) {
+    newMap.set(i, exclamations[Math.floor(Math.random() * exclamations.length)]);
+  }
+  setCardExclamationsMap(newMap);
+}, []);
+
   const getCardStoryText = (cardId: number): string => {
     const cardValue = cardId % 13;
     const suitValue = Math.floor(cardId / 13);
@@ -401,13 +420,24 @@ export default function CardDeckScene() {
     
     // Check if we have custom text for this card
     const isJQK = cardValue >= 10 && cardValue <= 12; // J, Q, K are 10, 11, 12
-    const customText = cardStoryMap[cardKey] || "";
+    const customText = cardStoryMap[cardKey].text || "";
     
     if (isJQK) {
-      return `It reminds me of ${customText}. Weirdly I picked the card up in ${userLocation}.`;
+      return `I found this card in ${userLocation}.  It reminds me of ${customText}.`;
     } else {
       return `It reminds me of you. It came all the way from ${userLocation}.`;
     }
+  };
+
+  const getCardStoryLink = (cardId: number): string => {
+    const cardValue = cardId % 13;
+    const suitValue = Math.floor(cardId / 13);
+    const cardKey = `${cardValue}-${suitValue}`;
+    
+    // Check if we have custom text for this card
+    const customLink = cardStoryMap[cardKey].link || "";
+    
+    return customLink;
   };
 
   // Function to get user's location non-invasively using ipwhois.io
@@ -1038,6 +1068,7 @@ export default function CardDeckScene() {
         .selected-card-text.fade-in {
           opacity: 1;
         }
+
       `}</style>
       
       {contextLost ? (
@@ -1116,7 +1147,7 @@ export default function CardDeckScene() {
             <div className={`card-info-panel ${panelFadeIn ? 'active' : ''}`}>
               <div className={`selected-card-text ${showSelectedText ? 'fade-in' : ''}`}>
                 <h2>{getCardName(selectedCardId)}</h2>
-                <p>Ah yes. The {getCardName(selectedCardId)}. Beautiful isn't it?</p>
+                <p>Ah yes. The {getCardName(selectedCardId)}. {cardExclamationsMap.get(selectedCardId)}</p>
                 <p>{getCardStoryText(selectedCardId)}</p>
                 <p>Me? Well I spend most of my time tinkering with technology.</p>
                 <p>Why? Because it reminds me of magic, of course.</p>
