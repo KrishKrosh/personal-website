@@ -23,15 +23,12 @@ const nextConfig = {
   },
   async redirects() {
     return [
-      // Fallback for non-existent routes to redirect to notes.krishkrosh.com
       {
-        source: '/:path((?!api/|_next/static|_next/image|favicon.ico|.*\.png$).*)', // Match all paths except known Next.js paths and static files
-        destination: 'https://notes.krishkrosh.com/:path*', // Redirect to the external site preserving the path
-        permanent: false, // This is not a permanent redirect
-        basePath: false, // Don't apply basePath to this redirect
+        source: '/:prefix(notes|tags|projects)/:path*',
+        destination: 'https://notes.krishkrosh.com/:prefix/:path*',
+        permanent: false, // Set to true if these are permanent redirects
       },
-      // ... any other redirects ...
-    ];
+    ]
   },
 }
 
