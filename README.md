@@ -1,39 +1,57 @@
 # Card Deck Animation
 
-This project demonstrates an interactive 3D card deck animation using React, Three.js, and React Three Fiber.
+Hi! I believe that experiences on the web are fun, so I wanted to turn my website into one. This is a threejs website that turns key points in my life into a deck of playing cards. There are a ton of easter eggs so I hope you enjoy :)
 
-## Card Back Texture
+## How It Works
 
-To customize the back of the cards with an artistic, intricate design:
+This project is built using **React** and **Three.js** (via `@react-three/fiber`), creating an interactive 3D card deck experience in the browser.
 
-1. Download a high-quality playing card back texture or create your own
-2. Save it as `card-back.png` in the `/public/images/` directory
-3. The texture should ideally be square or match the card aspect ratio (7:10)
-4. For best results, use a high-resolution image (at least 1024x1024 pixels)
+- **3D Scene & Animation:**  
+  The main scene ([components/card-deck-scene.tsx](components/card-deck-scene.tsx)) uses Three.js to render a dynamic environment, including custom background shaders, subtle light effects, and animated text.
+- **Card Deck Logic:**  
+  The deck ([components/card-deck.tsx](components/card-deck.tsx)) consists of selected cards (A, 3, 8, J, Q, K from each suit), each mapped to a key life event. Cards are animated and arranged in a globe-like formation, with smooth transitions and interactivity.
+- **UI Components:**  
+  The card UI ([components/ui/card.tsx](components/ui/card.tsx)) provides reusable, styled card components for consistent design and easy customization.
 
-### Recommended Texture Resources
+## Features
 
-Here are some places where you can find high-quality card back textures:
+- Interactive 3D card deck with smooth animations
+- Custom shader backgrounds and light effects for a mystical atmosphere
+- Responsive design for desktop and mobile
+- Easter eggs and hidden interactions throughout the experience
+- Info panels and dynamic transitions based on user actions
+- Debug mode to view cards in development
 
-- [Freepik](https://www.freepik.com/search?format=search&query=playing%20card%20back)
-- [Shutterstock](https://www.shutterstock.com/search/playing-card-back)
-- [Adobe Stock](https://stock.adobe.com/search?k=playing+card+back)
-- [Unsplash](https://unsplash.com/s/photos/pattern)
+## Project Structure
 
-If you don't add a custom texture, the cards will use a default gold metallic back design.
+- **components/card-deck-scene.tsx**  
+  Sets up the Three.js scene, background, lighting, and camera controls. Handles animation, user interaction, and overlays (like mystical text).
+- **components/card-deck.tsx**  
+  Manages the logic and rendering of the card deck, including card arrangement, animation, selection, and info panel positioning.
+- **components/ui/card.tsx**  
+  Contains styled React components for card UI (header, title, description, content, footer), used throughout the deck for consistency.
 
-## Development
+## Getting Started
 
-To run the development server:
+1. **Install dependencies:**
+   ```bash
+   bun install
+   ```
+2. **Run the development server:**
+   ```bash
+   bun run dev
+   ```
+3. Open [http://localhost:3000](http://localhost:3000) to view the site.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Customization & Contributing
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result. 
+Feel free to fork, customize, or contribute! The project is designed to be modular and easy to extend with new cards, animations, or features.
+
+## Credits
+
+- Built with [React](https://react.dev/) and [Three.js](https://threejs.org/) via [@react-three/fiber](https://docs.pmnd.rs/react-three-fiber/getting-started/introduction)
+- Special thanks to everyone who inspired the stories in these cards!
+
+## License
+
+MIT License (idk what this means)
