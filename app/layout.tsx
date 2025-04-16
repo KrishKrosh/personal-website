@@ -5,6 +5,8 @@ export const metadata: Metadata = {
   title: 'Krish Shah',
   description: 'A personal website, a magic trick, and a walk into the most important parts of my life. Pick a card, any card.',
   viewport: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no',
+
+
 }
 
 export default function RootLayout({
@@ -20,6 +22,10 @@ export default function RootLayout({
           rel="icon"
           href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>"
         />
+        <meta property="og:image" content="<generated>" />
+<meta property="og:image:type" content="<generated>" />
+<meta property="og:image:width" content="<generated>" />
+<meta property="og:image:height" content="<generated>" />
       </head>
       <body>{children}</body>
     </html>
