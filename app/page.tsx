@@ -1,8 +1,9 @@
 "use client"
 
 import { Suspense } from "react"
-import CardDeckScene from "@/components/card-deck-scene"
+// import CardDeckScene from "@/components/card-deck-scene"
 import LoadingScreen from "@/components/loading-screen"
+import AppLoader from "@/components/AppLoader"
 
 export default function Home() {
   return (
@@ -11,7 +12,7 @@ export default function Home() {
         <h1 className="text-white text-4xl md:text-6xl font-serif tracking-wider opacity-80">pick a card. any card.</h1>
       </div> */}
       <Suspense fallback={<LoadingScreen />}>
-        <CardDeckScene />
+        <AppLoader />
       </Suspense>
     </main>
   )

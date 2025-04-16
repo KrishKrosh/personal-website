@@ -6,6 +6,7 @@ import { MeshStandardMaterial, DoubleSide, Vector3, Group, Shape, ExtrudeGeometr
          MeshBasicMaterial, Euler, Quaternion, Matrix4, TextureLoader, ShaderMaterial,
          PlaneGeometry, RingGeometry, Texture, Cache } from "three"
 import { Text, useTexture } from "@react-three/drei"
+import { useCardBackTextureStatus, cardBackTextureLoader } from "@/lib/textureLoader"
 
 // Enable texture caching to prevent redundant decoding
 Cache.enabled = true;
@@ -339,47 +340,42 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     (realPhotoPath ? (textureCache[realPhotoPath] || getSharedTexture(realPhotoPath)) : null) : 
     null;
   
-  // Card back texture with error handling
-  const [cardBackTextureError, setCardBackTextureError] = useState(false);
-  const [cardBackAspectRatio, setCardBackAspectRatio] = useState(1);
-  const [loadedCardBackTexture, setLoadedCardBackTexture] = useState<Texture | null>(null);
+  // --- Updated Card Back Texture Handling ---
+  // Directly get the texture. Assumes AppLoader (parent) ensures it's loaded before this renders.
+  const cardBackTexture = cardBackTextureLoader.getTexture(); 
+  const [loadedCardBackTexture] = useState<Texture | null>(cardBackTexture); // Keep state for material memoization dependency
+  const [cardBackAspectRatio] = useState(() => {
+      if (cardBackTexture?.image) {
+          return cardBackTexture.image.width / cardBackTexture.image.height;
+      }
+      return 1; // Default aspect ratio
+  });
+
+  // State for metallic mask (loaded separately)
   const [loadedMetallicMaskTexture, setLoadedMetallicMaskTexture] = useState<Texture | null>(null);
   const [metallicIntensity, setMetallicIntensity] = useState(1.5); // Control metallic effect intensity
-  
-  // Use the shared card back texture
-  useEffect(() => {
-    // Try to get texture from shared loader
-    const texture = getCardBackTexture((texture) => {
-      if (texture) {
-        setLoadedCardBackTexture(texture);
-        if (texture.image) {
-          setCardBackAspectRatio(texture.image.width / texture.image.height);
-        }
-      } else {
-        setCardBackTextureError(true);
-      }
-    });
-    
-    // If texture is already available, use it immediately
-    if (texture) {
-      setLoadedCardBackTexture(texture);
-      if (texture.image) {
-        setCardBackAspectRatio(texture.image.width / texture.image.height);
-      }
-    }
 
-    // Load the metallic mask texture
+  // Load the metallic mask texture 
+  useEffect(() => {
+    // We no longer load the card back texture here.
+    // Load the metallic mask texture using its existing loader.
     getMetallicMaskTexture((texture) => {
       if (texture) {
         setLoadedMetallicMaskTexture(texture);
+      } else {
+        console.warn("Metallic mask texture failed to load for card", card.id);
+        // Handle potential error for metallic mask if needed
       }
     });
-  }, []);
-  
+    // The dependency array is empty as this effect should only run once on mount.
+  }, []); 
+  // --- End of Updated Card Back Texture Handling ---
+
   // Create a custom shader material for the card back that will properly display the texture
   // while respecting rounded corners - similar to the card face material
   const cardBackMaterial = useMemo(() => {
-    if (!loadedCardBackTexture || cardBackTextureError) return null;
+    // Use the state variable `loadedCardBackTexture` which holds the texture fetched on init
+    if (!loadedCardBackTexture) return null; 
     
     return new ShaderMaterial({
       uniforms: {
@@ -570,7 +566,7 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
       transparent: false,
       side: DoubleSide
     });
-  }, [loadedCardBackTexture, loadedMetallicMaskTexture, cardBackTextureError, width, height, cornerRadius, cardBackAspectRatio, metallicIntensity]);
+  }, [loadedCardBackTexture, loadedMetallicMaskTexture, width, height, cornerRadius, cardBackAspectRatio, metallicIntensity]);
   
   // Update the time uniform in shader for animated reflections
   useFrame((state) => {
@@ -1201,7 +1197,7 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     return () => {
       window.removeEventListener('click', handleGlobalClick);
     };
-  }, [isSelected, onSelect, card.id, isCardHovered]);
+  }, [isSelected, onSelect, card.id, isCardHovered, gl?.domElement]);
 
   // Shared texture loading for use with drei's useTexture
   useEffect(() => {
