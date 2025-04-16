@@ -420,7 +420,7 @@ useEffect(() => {
     
     // Check if we have custom text for this card
     const isJQK = cardValue >= 10 && cardValue <= 12; // J, Q, K are 10, 11, 12
-    const customText = cardStoryMap[cardKey].text || "";
+    const customText = cardStoryMap[cardKey]?.text || "";
     
     if (isJQK) {
       return `I found this card in ${userLocation}.  It reminds me of ${customText}.`;
