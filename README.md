@@ -1,4 +1,4 @@
-# Card Deck Animation
+# My Deck of Cards - Personal Website 🃏
 
 Hi! I believe that experiences on the web are fun, so I wanted to turn my website into one. This is a threejs website that turns key points in my life into a deck of playing cards. There are a ton of easter eggs so I hope you enjoy :)
 
