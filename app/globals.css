@@ -4,6 +4,7 @@
 
 body {
   font-family: Arial, Helvetica, sans-serif;
+  background-color: rgba(0, 0, 0, 0.8);
 }
 
 @layer utilities {
@@ -89,7 +90,7 @@ body {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
   }
 }
 
@@ -109,29 +110,49 @@ body {
   border-radius: 50%;
   filter: blur(4px) brightness(1.3);
   opacity: 0.7;
-  animation: float-orb 2.2s ease-in-out infinite;
   background: radial-gradient(circle at 70% 30%, hsl(var(--sidebar-ring)/0.7) 60%, hsl(var(--sidebar-accent)/0.4) 100%);
   box-shadow: 0 0 32px 8px hsl(var(--sidebar-ring)/0.25);
 }
 
 .orb1 {
   left: 0;
+  animation: float-orb1 2.2s ease-in-out infinite;
   animation-delay: 0s;
 }
+
 .orb2 {
   left: 50%;
-  transform: translateX(-50%) scale(1.1);
-  animation-delay: 0.5s;
+  transform: translateX(-50%);
+  animation: float-orb2 2.2s ease-in-out infinite;
+  animation-delay: 0.7s;
   background: radial-gradient(circle at 40% 60%, hsl(45, 95%, 65%, 0.92) 60%, hsl(45, 70%, 45%, 0.3) 100%);
   box-shadow: 0 0 32px 12px hsl(45, 95%, 65%, 0.15);
 }
+
 .orb3 {
   right: 0;
-  animation-delay: 1s;
+  animation: float-orb3 2.2s ease-in-out infinite;
+  animation-delay: 1.4s;
   background: radial-gradient(circle at 30% 70%, hsl(var(--sidebar-accent)/0.7) 60%, hsl(var(--sidebar-ring)/0.2) 100%);
 }
 
-@keyframes float-orb {
+@keyframes float-orb1 {
+  0% { transform: translateY(0) scale(1); opacity: 0.7; }
+  30% { opacity: 1; }
+  50% { transform: translateY(-16px) scale(1.12); opacity: 0.8; }
+  70% { opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 0.7; }
+}
+
+@keyframes float-orb2 {
+  0% { transform: translate(-50%, 0) scale(1.1); opacity: 0.7; }
+  30% { opacity: 1; }
+  50% { transform: translate(-50%, -16px) scale(1.22); opacity: 0.8; }
+  70% { opacity: 1; }
+  100% { transform: translate(-50%, 0) scale(1.1); opacity: 0.7; }
+}
+
+@keyframes float-orb3 {
   0% { transform: translateY(0) scale(1); opacity: 0.7; }
   30% { opacity: 1; }
   50% { transform: translateY(-16px) scale(1.12); opacity: 0.8; }

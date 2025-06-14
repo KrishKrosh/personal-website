@@ -872,7 +872,7 @@ useEffect(() => {
     >
       {/* Context lost message */}
       {contextLost && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black text-white">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 text-white">
           <div className="rounded-lg bg-black/90 p-6 text-center">
             <h2 className="mb-4 text-xl font-semibold">Recovering WebGL context...</h2>
             <p>The 3D environment is reloading. This should only take a moment.</p>

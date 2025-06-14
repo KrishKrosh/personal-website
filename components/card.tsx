@@ -7,6 +7,7 @@ import { MeshStandardMaterial, DoubleSide, Vector3, Group, Shape, ExtrudeGeometr
          PlaneGeometry, RingGeometry, Texture, Cache } from "three"
 import { Text, useTexture } from "@react-three/drei"
 import { useCardBackTextureStatus, cardBackTextureLoader } from "@/lib/textureLoader"
+import { getCachedTexture } from '@/lib/imageLoader'
 
 // Enable texture caching to prevent redundant decoding
 Cache.enabled = true;
@@ -201,9 +202,8 @@ const getCardImagePath = (value: string, suit: string, isReal: boolean = false):
   const mappedValue = valueMap[value] || value.toLowerCase();
   const mappedSuit = suitMap[suit];
   
-  // Use the real photo folder if specified
-  return isReal ? `/cards/real/${mappedValue}_${mappedSuit}.png` : `/cards/${mappedValue}_${mappedSuit}.png`;
-}
+  return `${mappedValue}_${mappedSuit}`;
+};
 
 // Function to check if a specific card image exists
 // This matches the actual images available in the public/cards directory
@@ -333,11 +333,11 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
   
   // Only load texture if we know the image exists
   const cardTexture = hasCustomImage ? 
-    (cardImagePath ? (textureCache[cardImagePath] || getSharedTexture(cardImagePath)) : null) : 
+    getCachedTexture(getCardImagePath(value, suit)) : 
     null;
   
   const realPhotoTexture = hasRealPhoto ? 
-    (realPhotoPath ? (textureCache[realPhotoPath] || getSharedTexture(realPhotoPath)) : null) : 
+    getCachedTexture(getCardImagePath(value, suit, true)) : 
     null;
   
   // --- Updated Card Back Texture Handling ---
