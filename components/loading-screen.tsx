@@ -1,12 +1,22 @@
 import { useEffect, useState } from 'react';
 import { getLoadingProgress } from '@/lib/imageLoader';
 
-export default function LoadingScreen({ onFadeComplete }: { onFadeComplete?: () => void }) {
+interface LoadingScreenProps {
+  onFadeComplete?: () => void;
+  isLoading: boolean;
+}
+
+export default function LoadingScreen({ onFadeComplete, isLoading }: LoadingScreenProps) {
   const [progress, setProgress] = useState(0);
   const [loadingTime, setLoadingTime] = useState<number | null>(null);
-  const [isFading, setIsFading] = useState(false);
+  const [hasNotifiedComplete, setHasNotifiedComplete] = useState(false);
 
   useEffect(() => {
+    // Reset notification state when loading starts
+    if (isLoading) {
+      setHasNotifiedComplete(false);
+    }
+
     // Check for loading time parameter in URL
     const params = new URLSearchParams(window.location.search);
     const debugLoadingTime = params.get('loadingTime');
@@ -27,38 +37,38 @@ export default function LoadingScreen({ onFadeComplete }: { onFadeComplete?: () 
         const simulatedProgress = Math.min(elapsed / loadingTime, 1);
         setProgress(simulatedProgress);
         
-        // Start fade out when progress reaches 100%
-        if (simulatedProgress >= 1 && !isFading) {
-          setIsFading(true);
-          // Wait for fade animation to complete before calling onFadeComplete
-          setTimeout(() => {
-            onFadeComplete?.();
-          }, 1000); // Match this with the CSS transition duration
+        // Notify parent when progress reaches 100%
+        if (simulatedProgress >= 1 && !hasNotifiedComplete) {
+          setHasNotifiedComplete(true);
+          onFadeComplete?.();
         }
       } else {
         // Normal mode - use actual loading progress
         const currentProgress = getLoadingProgress();
         setProgress(currentProgress);
         
-        // Start fade out when progress reaches 100%
-        if (currentProgress >= 1 && !isFading) {
-          setIsFading(true);
-          // Wait for fade animation to complete before calling onFadeComplete
-          setTimeout(() => {
-            onFadeComplete?.();
-          }, 1000); // Match this with the CSS transition duration
+        // Notify parent when progress reaches 100%
+        if (currentProgress >= 1 && !hasNotifiedComplete) {
+          setHasNotifiedComplete(true);
+          onFadeComplete?.();
         }
       }
     }, 100);
 
     const startTime = Date.now();
 
+    // When loading is complete, notify parent
+    if (!isLoading && !hasNotifiedComplete) {
+      setHasNotifiedComplete(true);
+      onFadeComplete?.();
+    }
+
     return () => clearInterval(interval);
-  }, [loadingTime, isFading, onFadeComplete]);
+  }, [loadingTime, onFadeComplete, isLoading, hasNotifiedComplete]);
 
   return (
     <div className="h-screen w-full flex items-center justify-center bg-black/80">
-      <div className={`ethereal-loader transition-transform duration-1000 ease-in-out ${isFading ? 'scale-90' : 'scale-100'}`}>
+      <div className="ethereal-loader">
         <div className="orb orb1" />
         <div className="orb orb2" />
         <div className="orb orb3" />

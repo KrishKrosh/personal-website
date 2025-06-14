@@ -318,7 +318,11 @@ function MysticalText() {
   }
 }
 
-export default function CardDeckScene() {
+interface CardDeckSceneProps {
+  onSceneReady?: () => void;
+}
+
+export default function CardDeckScene({ onSceneReady }: CardDeckSceneProps) {
   const [hovered, setHovered] = useState<boolean>(false)
   const [expanded, setExpanded] = useState<boolean>(false)
   const [contextLost, setContextLost] = useState<boolean>(false)
@@ -862,6 +866,14 @@ useEffect(() => {
       setPanelFadeIn(false);
     }
   }
+
+  // Notify when scene is ready
+  useEffect(() => {
+    // Wait for a frame to ensure everything is initialized
+    requestAnimationFrame(() => {
+      onSceneReady?.();
+    });
+  }, [onSceneReady]);
 
   return (
     <div
