@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getLoadingProgress } from '@/lib/imageLoader';
+import { useProgress } from '@react-three/drei';
 
 interface LoadingScreenProps {
   onFadeComplete?: () => void;
@@ -10,6 +10,7 @@ export default function LoadingScreen({ onFadeComplete, isLoading }: LoadingScre
   const [progress, setProgress] = useState(0);
   const [loadingTime, setLoadingTime] = useState<number | null>(null);
   const [hasNotifiedComplete, setHasNotifiedComplete] = useState(false);
+  const { progress: r3fProgress } = useProgress();
 
   useEffect(() => {
     // Reset notification state when loading starts
@@ -29,33 +30,28 @@ export default function LoadingScreen({ onFadeComplete, isLoading }: LoadingScre
       }
     }
 
-    // Update progress every 100ms
-    const interval = setInterval(() => {
+    // Update progress from R3F useProgress if not simulating
+    let interval: number | undefined;
+    const startTime = Date.now();
+    const tick = () => {
       if (loadingTime) {
-        // In debug mode, simulate progress based on time
         const elapsed = Date.now() - startTime;
         const simulatedProgress = Math.min(elapsed / loadingTime, 1);
         setProgress(simulatedProgress);
-        
-        // Notify parent when progress reaches 100%
         if (simulatedProgress >= 1 && !hasNotifiedComplete) {
           setHasNotifiedComplete(true);
           onFadeComplete?.();
         }
       } else {
-        // Normal mode - use actual loading progress
-        const currentProgress = getLoadingProgress();
-        setProgress(currentProgress);
-        
-        // Notify parent when progress reaches 100%
-        if (currentProgress >= 1 && !hasNotifiedComplete) {
+        const normalized = Math.min(Math.max(r3fProgress / 100, 0), 1);
+        setProgress(normalized);
+        if (normalized >= 1 && !hasNotifiedComplete) {
           setHasNotifiedComplete(true);
           onFadeComplete?.();
         }
       }
-    }, 100);
-
-    const startTime = Date.now();
+    };
+    interval = window.setInterval(tick, 100);
 
     // When loading is complete, notify parent
     if (!isLoading && !hasNotifiedComplete) {
@@ -63,8 +59,10 @@ export default function LoadingScreen({ onFadeComplete, isLoading }: LoadingScre
       onFadeComplete?.();
     }
 
-    return () => clearInterval(interval);
-  }, [loadingTime, onFadeComplete, isLoading, hasNotifiedComplete]);
+    return () => {
+      if (interval) window.clearInterval(interval);
+    };
+  }, [loadingTime, onFadeComplete, isLoading, hasNotifiedComplete, r3fProgress]);
 
   return (
     <div className="h-screen w-full flex items-center justify-center bg-black/80">

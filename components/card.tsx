@@ -182,27 +182,33 @@ const createRoundedRectShape = (width: number, height: number, radius: number) =
   return shape
 }
 
-// Function to get the card image path based on value and suit
-const getCardImagePath = (value: string, suit: string, isReal: boolean = false): string => {
+// Function to get the card image key (e.g., "j_spades")
+const getCardImageKey = (value: string, suit: string): string => {
   // Map to the correct filename format
   const valueMap: { [key: string]: string } = {
     "J": "j",
     "Q": "q",
     "K": "k"
   };
-  
+
   const suitMap: { [key: string]: string } = {
     "♠": "spades",
     "♥": "hearts",
     "♦": "diamonds",
     "♣": "clubs"
   };
-  
+
   // Use the mapped values if they exist, otherwise use the original value
   const mappedValue = valueMap[value] || value.toLowerCase();
   const mappedSuit = suitMap[suit];
-  
   return `${mappedValue}_${mappedSuit}`;
+};
+
+// Function to get the public path for a card image file
+const getCardImagePath = (value: string, suit: string, isReal: boolean = false): string => {
+  const key = getCardImageKey(value, suit);
+  const fileName = `${key}.png`;
+  return isReal ? `/cards/real/${fileName}` : `/cards/${fileName}`;
 };
 
 // Function to check if a specific card image exists
@@ -331,13 +337,13 @@ export default function Card({ card, hovered, expanded, isSelected = false, allC
     return "";
   }, [value, suit, hasRealPhoto]);
   
-  // Only load texture if we know the image exists
+  // Only retrieve cached texture by key if we know the image exists
   const cardTexture = hasCustomImage ? 
-    getCachedTexture(getCardImagePath(value, suit)) : 
+    getCachedTexture(getCardImageKey(value, suit)) : 
     null;
   
   const realPhotoTexture = hasRealPhoto ? 
-    getCachedTexture(getCardImagePath(value, suit, true)) : 
+    getCachedTexture(getCardImageKey(value, suit), true) : 
     null;
   
   // --- Updated Card Back Texture Handling ---

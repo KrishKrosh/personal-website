@@ -4,34 +4,27 @@ import React, { useState, useEffect } from 'react';
 import { useCardBackTextureStatus } from '@/lib/textureLoader'; // Import the hook
 import LoadingScreen from './loading-screen'; // Import the loading screen
 import CardDeckScene from './card-deck-scene'; // Use relative path
+import { Suspense } from 'react';
+import { useProgress } from '@react-three/drei';
 import { preloadCardImages } from '@/lib/imageLoader';
 
 export default function AppLoader() {
   const { loaded: textureLoaded, error: textureError, loading: textureLoading } = useCardBackTextureStatus();
   const [isLoading, setIsLoading] = useState(true);
-  const [imagesLoaded, setImagesLoaded] = useState(false);
   const [isSceneReady, setIsSceneReady] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const { progress } = useProgress();
 
-  // Handle all loading states
+  // Kick off image preloading (tracked by DefaultLoadingManager)
   useEffect(() => {
-    const loadEverything = async () => {
-      try {
-        // Start preloading images
-        await preloadCardImages();
-        setImagesLoaded(true);
-      } catch (error) {
-        console.error('Failed to load images:', error);
-        // Even if some images fail to load, we should still show the app
-        setImagesLoaded(true);
-      }
-    };
-
-    loadEverything();
+    preloadCardImages().catch((error) => {
+      console.warn('Preloading some images failed:', error);
+    });
   }, []);
 
   // Check if everything is loaded
-  const isEverythingLoaded = !textureLoading && textureLoaded && imagesLoaded && isSceneReady;
+  const texturesReady = progress >= 100;
+  const isEverythingLoaded = !textureLoading && textureLoaded && texturesReady && isSceneReady;
 
   // Handle loading complete
   const handleLoadingComplete = () => {
@@ -55,11 +48,11 @@ export default function AppLoader() {
 
   return (
     <div className="relative h-screen w-full">
-      {/* Card deck scene - always present but initially invisible */}
-      <div className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-        isLoading ? 'opacity-0' : 'opacity-100'
-      }`}>
-        <CardDeckScene onSceneReady={() => setIsSceneReady(true)} />
+      {/* Card deck scene - always present under the overlay */}
+      <div className={`absolute inset-0 opacity-100`}>
+        <Suspense fallback={null}>
+          <CardDeckScene onSceneReady={() => setIsSceneReady(true)} />
+        </Suspense>
       </div>
 
       {/* Loading screen with semi-transparent background */}

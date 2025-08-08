@@ -32,10 +32,9 @@ const getImagePath = (cardName: string, isReal: boolean = false): string => {
   return isReal ? `/cards/real/${cardName}.png` : `/cards/${cardName}.png`;
 };
 
-// Function to optimize image URL with Cloudflare parameters
+// Return the raw URL for local/public assets to preserve caching behavior
 const optimizeImageUrl = (url: string): string => {
-  // Add Cloudflare image optimization parameters
-  return `${url}?format=webp&quality=80&width=800`;
+  return url;
 };
 
 // Function to preload all card images
