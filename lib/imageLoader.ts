@@ -32,29 +32,12 @@ const getImagePath = (cardName: string, isReal: boolean = false): string => {
   return isReal ? `/cards/real/${cardName}.webp` : `/cards/${cardName}.webp`;
 };
 
-// Build a Next.js image-optimizer URL for significantly smaller payloads.
-// Falls back gracefully on the same-origin optimizer route.
+// Image optimization function - currently disabled for Cloudflare compatibility
+// Falls back to original URLs since CDN-CGI requires paid Cloudflare plan
 export const optimizeImageUrl = (url: string, width: number = 640, quality: number = 70): string => {
-  try {
-    // Use Cloudflare Image Resizing in production (on a non-localhost domain).
-    if (typeof window !== 'undefined') {
-      const host = window.location.hostname;
-      const isLocal = host === 'localhost' || host === '127.0.0.1';
-      if (!isLocal) {
-        const options = `width=${width},quality=${quality},format=auto`;
-        // The route accepts both absolute and relative URLs
-        if (url.startsWith('http')) {
-          return `/cdn-cgi/image/${options}/${url}`;
-        }
-        // Ensure a single leading slash
-        const normalized = url.startsWith('/') ? url : `/${url}`;
-        return `/cdn-cgi/image/${options}${normalized}`;
-      }
-    }
-  } catch {
-    // fallthrough to unoptimized URL
-  }
-  return url; // Dev/local fallback without optimization
+  // Return original URL without CDN-CGI optimization
+  // The webp images are already optimized, so this is fine
+  return url;
 };
 
 // Function to preload all card images
@@ -63,31 +46,35 @@ export const preloadCardImages = async (): Promise<void> => {
   const loadPromises: Promise<void>[] = [];
 
   // Load all card images
-  CARD_IMAGES.forEach(cardName => {
-    const imagePath = getImagePath(cardName);
+  const queueLoad = (imagePath: string) => {
     const optimizedUrl = optimizeImageUrl(imagePath);
-    
-    const loadPromise = new Promise<void>((resolve, reject) => {
+    const loadPromise = new Promise<void>((resolve) => {
       loader.load(
         optimizedUrl,
         (texture) => {
           // Optimize texture settings
           texture.anisotropy = 16;
           texture.needsUpdate = true;
-          
-          // Cache the texture
+          // Cache the texture by its original path (non-optimized)
           textureCache[imagePath] = texture;
           resolve();
         },
         undefined,
+        // Do not reject on error so a missing file (e.g., q_diamonds real) doesn't abort preloading others
         (error) => {
           console.warn(`Failed to load image: ${imagePath}`, error);
-          reject(error);
+          resolve();
         }
       );
     });
-
     loadPromises.push(loadPromise);
+  };
+
+  CARD_IMAGES.forEach((cardName) => {
+    // Illustrated version
+    queueLoad(getImagePath(cardName));
+    // Real-photo version (if present on disk; failures are tolerated)
+    queueLoad(getImagePath(cardName, true));
   });
 
   // Wait for all images to load
