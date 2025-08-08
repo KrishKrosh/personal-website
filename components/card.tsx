@@ -36,7 +36,7 @@ const getCardBackTexture = (() => {
       loading = true;
       const loader = new TextureLoader();
       loader.load(
-        optimizeImageUrl("/images/card-back.png", 1024, 80),
+        optimizeImageUrl("/images/card-back.webp", 1024, 80),
         (loadedTexture) => {
           texture = loadedTexture;
           
@@ -83,7 +83,7 @@ const getMetallicMaskTexture = (() => {
       loading = true;
       const loader = new TextureLoader();
       loader.load(
-        optimizeImageUrl("/images/card-back-metallic-mask.png", 1024, 80),
+        optimizeImageUrl("/images/card-back-metallic-mask.webp", 1024, 80),
         (loadedTexture) => {
           texture = loadedTexture;
           
@@ -207,7 +207,7 @@ const getCardImageKey = (value: string, suit: string): string => {
 // Function to get the public path for a card image file
 const getCardImagePath = (value: string, suit: string, isReal: boolean = false): string => {
   const key = getCardImageKey(value, suit);
-  const fileName = `${key}.png`;
+  const fileName = `${key}.webp`;
   return isReal ? `/cards/real/${fileName}` : `/cards/${fileName}`;
 };
 

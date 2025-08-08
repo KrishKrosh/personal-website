@@ -29,7 +29,7 @@ const CARD_IMAGES = [
 
 // Function to get the image path
 const getImagePath = (cardName: string, isReal: boolean = false): string => {
-  return isReal ? `/cards/real/${cardName}.png` : `/cards/${cardName}.png`;
+  return isReal ? `/cards/real/${cardName}.webp` : `/cards/${cardName}.webp`;
 };
 
 // Build a Next.js image-optimizer URL for significantly smaller payloads.

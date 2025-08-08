@@ -19,7 +19,7 @@ const cardBackTextureLoader = (() => {
     error = null; // Reset error on new attempt
     const loader = new TextureLoader();
     loader.load(
-      optimizeImageUrl("/images/card-back.png", 1024, 80),
+      optimizeImageUrl("/images/card-back.webp", 1024, 80),
       (loadedTexture) => {
         texture = loadedTexture;
         // Apply optimizations
