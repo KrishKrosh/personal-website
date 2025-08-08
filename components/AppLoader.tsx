@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useCardBackTextureStatus } from '@/lib/textureLoader'; // Import the hook
 import LoadingScreen from './loading-screen'; // Import the loading screen
 import CardDeckScene from './card-deck-scene'; // Use relative path
-import { Suspense } from 'react';
 import { useProgress } from '@react-three/drei';
 import { preloadCardImages } from '@/lib/imageLoader';
 
@@ -14,6 +13,7 @@ export default function AppLoader() {
   const [isSceneReady, setIsSceneReady] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const { progress } = useProgress();
+  const [firstFrameDrawn, setFirstFrameDrawn] = useState(false);
 
   // Kick off image preloading (tracked by DefaultLoadingManager)
   useEffect(() => {
@@ -24,7 +24,8 @@ export default function AppLoader() {
 
   // Check if everything is loaded
   const texturesReady = progress >= 100;
-  const isEverythingLoaded = !textureLoading && textureLoaded && texturesReady && isSceneReady;
+  // Also require that the canvas has mounted once (we'll use a minimal heuristic tied to scene-ready then next tick)
+  const isEverythingLoaded = !textureLoading && textureLoaded && texturesReady && isSceneReady && firstFrameDrawn;
 
   // Handle loading complete
   const handleLoadingComplete = () => {
@@ -50,9 +51,13 @@ export default function AppLoader() {
     <div className="relative h-screen w-full">
       {/* Card deck scene - always present under the overlay */}
       <div className={`absolute inset-0 opacity-100`}>
-        <Suspense fallback={null}>
-          <CardDeckScene onSceneReady={() => setIsSceneReady(true)} />
-        </Suspense>
+        <CardDeckScene 
+          onSceneReady={() => {
+            setIsSceneReady(true);
+            // Next tick mark "first frame" drawn so overlay can fade only after the scene had a chance to render
+            requestAnimationFrame(() => setFirstFrameDrawn(true));
+          }}
+        />
       </div>
 
       {/* Loading screen with semi-transparent background */}

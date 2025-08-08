@@ -320,9 +320,10 @@ function MysticalText() {
 
 interface CardDeckSceneProps {
   onSceneReady?: () => void;
+  onFirstFrameDrawn?: () => void;
 }
 
-export default function CardDeckScene({ onSceneReady }: CardDeckSceneProps) {
+export default function CardDeckScene({ onSceneReady, onFirstFrameDrawn }: CardDeckSceneProps) {
   const [hovered, setHovered] = useState<boolean>(false)
   const [expanded, setExpanded] = useState<boolean>(false)
   const [contextLost, setContextLost] = useState<boolean>(false)
@@ -343,6 +344,7 @@ export default function CardDeckScene({ onSceneReady }: CardDeckSceneProps) {
   
   // Reference to the canvas container
   const containerRef = useRef<HTMLDivElement>(null)
+  // Note: first-frame notification must occur within Canvas context
   
   // Reference to track the current animation cycle - each new card gets a unique ID
   const animationCycleRef = useRef<number>(0)
