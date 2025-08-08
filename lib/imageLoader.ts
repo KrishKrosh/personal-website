@@ -32,9 +32,29 @@ const getImagePath = (cardName: string, isReal: boolean = false): string => {
   return isReal ? `/cards/real/${cardName}.png` : `/cards/${cardName}.png`;
 };
 
-// Return the raw URL for local/public assets to preserve caching behavior
-const optimizeImageUrl = (url: string): string => {
-  return url;
+// Build a Next.js image-optimizer URL for significantly smaller payloads.
+// Falls back gracefully on the same-origin optimizer route.
+export const optimizeImageUrl = (url: string, width: number = 640, quality: number = 70): string => {
+  try {
+    // Use Cloudflare Image Resizing in production (on a non-localhost domain).
+    if (typeof window !== 'undefined') {
+      const host = window.location.hostname;
+      const isLocal = host === 'localhost' || host === '127.0.0.1';
+      if (!isLocal) {
+        const options = `width=${width},quality=${quality},format=auto`;
+        // The route accepts both absolute and relative URLs
+        if (url.startsWith('http')) {
+          return `/cdn-cgi/image/${options}/${url}`;
+        }
+        // Ensure a single leading slash
+        const normalized = url.startsWith('/') ? url : `/${url}`;
+        return `/cdn-cgi/image/${options}${normalized}`;
+      }
+    }
+  } catch {
+    // fallthrough to unoptimized URL
+  }
+  return url; // Dev/local fallback without optimization
 };
 
 // Function to preload all card images

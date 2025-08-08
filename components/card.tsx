@@ -7,7 +7,7 @@ import { MeshStandardMaterial, DoubleSide, Vector3, Group, Shape, ExtrudeGeometr
          PlaneGeometry, RingGeometry, Texture, Cache } from "three"
 import { Text, useTexture } from "@react-three/drei"
 import { useCardBackTextureStatus, cardBackTextureLoader } from "@/lib/textureLoader"
-import { getCachedTexture } from '@/lib/imageLoader'
+import { getCachedTexture, optimizeImageUrl } from '@/lib/imageLoader'
 
 // Enable texture caching to prevent redundant decoding
 Cache.enabled = true;
@@ -36,7 +36,7 @@ const getCardBackTexture = (() => {
       loading = true;
       const loader = new TextureLoader();
       loader.load(
-        "/images/card-back.png",
+        optimizeImageUrl("/images/card-back.png", 1024, 80),
         (loadedTexture) => {
           texture = loadedTexture;
           
@@ -83,7 +83,7 @@ const getMetallicMaskTexture = (() => {
       loading = true;
       const loader = new TextureLoader();
       loader.load(
-        "/images/card-back-metallic-mask.png",
+        optimizeImageUrl("/images/card-back-metallic-mask.png", 1024, 80),
         (loadedTexture) => {
           texture = loadedTexture;
           

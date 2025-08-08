@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { TextureLoader, Texture } from "three";
+import { optimizeImageUrl } from "./imageLoader";
 
 // Singleton pattern for card back texture loading
 const cardBackTextureLoader = (() => {
@@ -18,7 +19,7 @@ const cardBackTextureLoader = (() => {
     error = null; // Reset error on new attempt
     const loader = new TextureLoader();
     loader.load(
-      "/images/card-back.png",
+      optimizeImageUrl("/images/card-back.png", 1024, 80),
       (loadedTexture) => {
         texture = loadedTexture;
         // Apply optimizations

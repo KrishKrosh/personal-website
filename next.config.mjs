@@ -13,8 +13,12 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // Enable Next Image Optimization locally; on Cloudflare, we rely on CDN image resizing
   images: {
-    unoptimized: true,
+    unoptimized: false,
+    formats: ["image/avif", "image/webp"],
+    deviceSizes: [320, 420, 640, 750, 828, 1080, 1200],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256],
   },
   experimental: {
     webpackBuildWorker: true,
@@ -27,6 +31,16 @@ const nextConfig = {
         source: '/:prefix(notes|tags|projects)/:path*',
         destination: 'https://notes.krishkrosh.com/:prefix/:path*',
         permanent: false, // Set to true if these are permanent redirects
+      },
+    ]
+  },
+  async headers() {
+    return [
+      {
+        source: "/(cards|images)/(.*)",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
       },
     ]
   },
